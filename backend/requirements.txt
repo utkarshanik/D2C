@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+litellm
+playwright
+pillow
+opencv-python-headless
+scikit-image
+pytesseract
+sqlalchemy
+pytest
+httpx
