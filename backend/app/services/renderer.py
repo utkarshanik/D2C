@@ -1,1 +1,0 @@
-"""Playwright render to PNG."""
