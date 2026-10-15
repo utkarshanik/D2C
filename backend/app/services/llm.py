@@ -1,7 +1,6 @@
 import asyncio
 import base64
 import logging
-import re
 from typing import AsyncIterator
 
 import litellm
@@ -9,8 +8,6 @@ import litellm
 from app.config import settings
 
 log = logging.getLogger(__name__)
-
-litellm.suppress_debug_info = True
 
 # litellm turns every provider's errors into these common types, so one
 # except clause covers Gemini quota errors, Ollama being down, timeouts, etc.
@@ -28,11 +25,11 @@ def to_data_url(image_bytes: bytes, mime: str = "image/png") -> str:
     return f"data:{mime};base64,{base64.b64encode(image_bytes).decode()}"
 
 
-def build_messages(system_prompt: str, user_text: str, images: list[bytes]) -> list[dict]:
-    """Build one chat request: system rules + user text + one or more images."""
+def build_messages(system_prompt: str, user_text: str, images: list[tuple[bytes, str]]) -> list[dict]:
+    """Build one chat request: system rules + user text + one or more (bytes, mime) images."""
     content = [{"type": "text", "text": user_text}]
-    for img in images:
-        content.append({"type": "image_url", "image_url": {"url": to_data_url(img)}})
+    for img, mime in images:
+        content.append({"type": "image_url", "image_url": {"url": to_data_url(img, mime)}})
     return [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": content},
@@ -83,13 +80,16 @@ async def stream_code(messages: list[dict]) -> AsyncIterator[str]:
     raise RuntimeError("All models failed")
 
 
-async def generate_code(system_prompt: str, user_text: str, images: list[bytes]) -> str:
-    """Non-streaming convenience wrapper: collect the whole answer."""
+async def generate_from_image(
+    image_bytes: bytes, mime: str, prompt: str, system_prompt: str
+) -> AsyncIterator[str]:
+    """What the /generate route calls: one screenshot in, streamed text out."""
+    messages = build_messages(system_prompt, prompt, [(image_bytes, mime)])
+    async for delta in stream_code(messages):
+        yield delta
+
+
+async def generate_code(system_prompt: str, user_text: str, images: list[tuple[bytes, str]]) -> str:
+    """Non-streaming wrapper for callers that need the whole answer (the refine loop later)."""
     messages = build_messages(system_prompt, user_text, images)
     return "".join([delta async for delta in stream_code(messages)])
-
-
-def extract_code(text: str) -> str:
-    """Pull the code out of a ```html fence (the closing fence may be missing mid-stream)."""
-    match = re.search(r"```(?:html)?\s*(.*?)(```|$)", text, re.S)
-    return (match.group(1) if match else text).strip()
