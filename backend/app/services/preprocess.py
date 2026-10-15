@@ -1,1 +1,0 @@
-"""Resize, palette, and OCR."""
