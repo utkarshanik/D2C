@@ -2,7 +2,7 @@ import { useState } from "react";
 import "./App.css";
 import { CodeView } from "./components/CodeView";
 import { Preview } from "./components/Preview";
-import { Uploader } from "./components/uploader";
+import { Uploader } from "./components/Uploader";
 import { useGenerate } from "./hooks/useGenerate";
 
 type Tab = "preview" | "code";
