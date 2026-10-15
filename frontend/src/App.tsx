@@ -1,122 +1,62 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useState } from "react";
+import "./App.css";
+import { CodeView } from "./components/CodeView";
+import { Preview } from "./components/Preview";
+import { Uploader } from "./components/Uploader";
+import { useGenerate } from "./hooks/useGenerate";
 
-function App() {
-  const [count, setCount] = useState(0)
+type Tab = "preview" | "code";
+
+export default function App() {
+  const [file, setFile] = useState<File | null>(null);
+  const [hint, setHint] = useState("");
+  const [manualTab, setManualTab] = useState<Tab | null>(null);
+  const { code, previewCode, meta, status, error, busy, generate, stop } = useGenerate();
+
+  // Until the user clicks a tab: show the code while streaming, the preview when finished
+  const tab: Tab = manualTab ?? (busy ? "code" : "preview");
+
+  const onGenerate = () => {
+    if (!file) return;
+    setManualTab(null);
+    void generate(file, hint);
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="app">
+      <aside className="sidebar">
+        <h2>Design to code</h2>
+        <Uploader file={file} onSelect={setFile} disabled={busy} />
+        {meta && <p className="muted">Original: {meta.width} × {meta.height}px</p>}
+        <textarea
+          placeholder="Optional hint, e.g. dark theme"
+          value={hint}
+          onChange={(e) => setHint(e.target.value)}
+          disabled={busy}
+          rows={3}
+        />
+        <div className="row">
+          <button onClick={onGenerate} disabled={!file || busy}>{busy ? "Working..." : "Generate code"}</button>
+          {busy && <button onClick={stop} className="secondary">Stop</button>}
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        {status && <p className="muted">{status}</p>}
+        {error && <p className="error">{error}</p>}
+      </aside>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <main className="main">
+        <div className="tabs">
+          <button onClick={() => setManualTab("preview")} disabled={tab === "preview"}>Preview</button>
+          <button onClick={() => setManualTab("code")} disabled={tab === "code"}>Code</button>
+          {code && (
+            <button className="secondary push" onClick={() => void navigator.clipboard.writeText(previewCode || code)}>
+              Copy code
+            </button>
+          )}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+        <div className="panel">
+          {tab === "preview" ? <Preview html={previewCode} /> : <CodeView code={code} />}
         </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </main>
+    </div>
+  );
 }
-
-export default App
