@@ -16,6 +16,7 @@ from PIL import Image
 from app.main import app
 from app.routes import generate as route
 from app.services.postprocess import extract_html
+from app.services.preprocess import PaletteColor, PreprocessResult
 
 client = TestClient(app)
 
@@ -29,6 +30,20 @@ def png_bytes(size=(40, 20)) -> bytes:
 def events(response) -> list[dict]:
     """Parse the SSE body into a list of event dicts."""
     return [json.loads(line[6:]) for line in response.text.splitlines() if line.startswith("data: ")]
+
+
+@pytest.fixture(autouse=True)
+def fake_preprocessing(monkeypatch):
+    async def fake(image_bytes):
+        with Image.open(io.BytesIO(image_bytes)) as image:
+            return PreprocessResult(
+                width=image.width,
+                height=image.height,
+                palette=(PaletteColor("#FFFFFF", 100.0),),
+                ocr_text="",
+            )
+
+    monkeypatch.setattr(route, "preprocess_image", fake)
 
 
 def fake_llm(parts):
@@ -82,6 +97,35 @@ def test_hint_is_added_to_prompt(monkeypatch):
         data={"hint": "dark theme"},
     )
     assert "dark theme" in seen["prompt"]
+
+
+def test_preprocessing_facts_are_added_to_prompt(monkeypatch):
+    seen = {}
+
+    async def preprocess(_image_bytes):
+        return PreprocessResult(
+            width=320,
+            height=180,
+            palette=(
+                PaletteColor("#112233", 70.0),
+                PaletteColor("#ABCDEF", 30.0),
+            ),
+            ocr_text="Create account\nWelcome back",
+        )
+
+    async def fake(image_bytes, mime, prompt, system_prompt):
+        seen["prompt"] = prompt
+        yield "x"
+
+    monkeypatch.setattr(route, "preprocess_image", preprocess)
+    monkeypatch.setattr(route, "generate_from_image", fake)
+
+    client.post("/generate", files={"image": ("a.png", png_bytes(), "image/png")})
+
+    assert "320px × 180px" in seen["prompt"]
+    assert "#112233 (70.00%)" in seen["prompt"]
+    assert "#ABCDEF (30.00%)" in seen["prompt"]
+    assert "Create account\nWelcome back" in seen["prompt"]
 
 
 def test_rejects_non_image():
