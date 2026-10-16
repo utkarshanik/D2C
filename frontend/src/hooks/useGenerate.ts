@@ -9,6 +9,7 @@ export function useGenerate() {
     const [previewCode, setPreviewCode] = useState(""); // clean final HTML for the iframe
     const [meta, setMeta] = useState<ImageMeta | null>(null);
     const [status, setStatus] = useState("");
+    const [scores, setScores] = useState<number[]>([]); // SSIM per round: draft, then each fix
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
 
@@ -33,6 +34,9 @@ export function useGenerate() {
                 setCode(evt.code); // replace raw text with the cleaned code
                 setPreviewCode(evt.code); // only now is it safe to render in the iframe
                 break;
+            case "score":
+                setScores((prev) => [...prev, evt.score]);
+                break;
             case "done":
                 setStatus("Done");
                 break;
@@ -53,6 +57,7 @@ export function useGenerate() {
             setCode("");
             setPreviewCode("");
             setMeta(null);
+            setScores([]);
             setError("");
             setStatus("Uploading...");
 
@@ -108,5 +113,5 @@ export function useGenerate() {
         [handleEvent],
     );
 
-    return { code, previewCode, meta, status, error, busy, generate, stop };
+    return { code, previewCode, meta, scores, status, error, busy, generate, stop };
 }

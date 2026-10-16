@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     FALLBACK_MODEL: str = "ollama/qwen2.5vl"
     REFINE_ROUNDS: int = 2
     MAX_RETRIES: int = 2  # retries per model before moving to the fallback
+    REFINE_TARGET_SCORE: float = 0.95
 
 
 settings = Settings()

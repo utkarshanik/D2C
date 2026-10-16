@@ -11,7 +11,7 @@ export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [hint, setHint] = useState("");
   const [manualTab, setManualTab] = useState<Tab | null>(null);
-  const { code, previewCode, meta, status, error, busy, generate, stop } = useGenerate();
+  const { code, previewCode, meta, scores, status, error, busy, generate, stop } = useGenerate();
 
   // Until the user clicks a tab: show the code while streaming, the preview when finished
   const tab: Tab = manualTab ?? (busy ? "code" : "preview");
@@ -39,6 +39,10 @@ export default function App() {
           <button onClick={onGenerate} disabled={!file || busy}>{busy ? "Working..." : "Generate code"}</button>
           {busy && <button onClick={stop} className="secondary">Stop</button>}
         </div>
+        {scores.length > 0 && (
+          // SSIM can dip below 0 for very different images, so clamp before showing a percentage
+          <p className="muted">Match with original: {scores.map((s) => `${Math.round(Math.max(0, s) * 100)}%`).join(" → ")}</p>
+        )}
         {status && <p className="muted">{status}</p>}
         {error && <p className="error">{error}</p>}
       </aside>
