@@ -84,6 +84,7 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
                 ocr_text=measurements.ocr_text,
                 hint=hint,
             )
+            log.info("Generate prompt:\n%s", prompt)
 
             yield sse({"type": "status", "message": "Generating code..."})
 
