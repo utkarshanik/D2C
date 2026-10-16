@@ -5,6 +5,7 @@ export type SseEvent =
     | { type: "status"; message: string }
     | { type: "chunk"; delta: string }
     | { type: "code"; code: string }
+    | { type: "score"; round: number; score: number } // SSIM match with the original (module 5)
     | { type: "done" }
     | { type: "error"; message: string };
 
