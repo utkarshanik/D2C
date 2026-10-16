@@ -27,9 +27,10 @@ from fastapi.responses import StreamingResponse
 # We don't trust the filename or the client's content-type header.
 from PIL import Image, UnidentifiedImageError
 
-from app.prompts.html_tailwind import SYSTEM_PROMPT, USER_PROMPT
+from app.prompts.html_tailwind import SYSTEM_PROMPT, build_user_prompt
 from app.services.llm import generate_from_image
 from app.services.postprocess import extract_html
+from app.services.preprocess import preprocess_image
 
 # Note: reading the upload needs the `python-multipart` package installed.
 # FastAPI imports it behind the scenes; without it, this route fails at startup.
@@ -69,11 +70,21 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
         raise HTTPException(413, "Image is too large (max 5 MB).")
 
     width, height, mime = inspect_image(data)
-    prompt = USER_PROMPT + (f" Extra instructions: {hint.strip()}" if hint.strip() else "")
 
     async def event_stream():
         try:
             yield sse({"type": "meta", "width": width, "height": height})
+            yield sse({"type": "status", "message": "Analyzing colors and text..."})
+
+            measurements = await preprocess_image(data)
+            prompt = build_user_prompt(
+                width=measurements.width,
+                height=measurements.height,
+                palette=measurements.palette,
+                ocr_text=measurements.ocr_text,
+                hint=hint,
+            )
+
             yield sse({"type": "status", "message": "Generating code..."})
 
             parts: list[str] = []

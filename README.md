@@ -173,7 +173,7 @@ Build in this order. Each module must work and be testable on its own before sta
 | 3 | Frontend uploader + live preview | Upload/paste shows streamed code and a sandboxed iframe preview | todo |
 | 4 | Renderer (`renderer.py`) | Generated HTML becomes a PNG at the original screenshot size | todo |
 | 5 | Refine loop (`refine.py`) | Compare and fix runs for N rounds with SSIM early stop | todo |
-| 6 | Preprocessing | Palette and OCR text are added to the prompt | todo |
+| 6 | Preprocessing | Palette and OCR text are added to the prompt | done |
 | 7 | Persistence | Projects and versions saved in SQLite; follow-up edits use history | todo |
 | 8 | React + MUI target | Sandpack preview; MUI-aware prompt with an allowed-components list | todo |
 
