@@ -10,7 +10,6 @@ SSE events (each is one line: `data: {json}` followed by a blank line):
   {"type": "status", "message": "..."}               progress text for the UI
   {"type": "chunk",  "delta": "..."}                 raw tokens as they arrive (live typing)
   {"type": "code",   "code": "<html>..."}            cleaned final code
-  {"type": "score",  "round": 1, "score": 0.91}     SSIM match with the original (module 5)
   {"type": "done"}
   {"type": "error",  "message": "..."}
 """
@@ -28,11 +27,9 @@ from fastapi.responses import StreamingResponse
 # We don't trust the filename or the client's content-type header.
 from PIL import Image, UnidentifiedImageError
 
-from app.config import settings
 from app.prompts.html_tailwind import SYSTEM_PROMPT, USER_PROMPT
 from app.services.llm import generate_from_image
 from app.services.postprocess import extract_html
-from app.services.refine import refine_events
 
 # Note: reading the upload needs the `python-multipart` package installed.
 # FastAPI imports it behind the scenes; without it, this route fails at startup.
@@ -84,19 +81,7 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
                 parts.append(delta)
                 yield sse({"type": "chunk", "delta": delta})
 
-            first_draft = extract_html("".join(parts))
-            yield sse({"type": "code", "code": first_draft})
-
-            # Module 5: compare the render with the original and fix differences.
-            # Failures here must not lose the first draft the user already has.
-            if settings.REFINE_ROUNDS > 0:
-                try:
-                    async for evt in refine_events(data, mime, width, height, first_draft, hint.strip()):
-                        yield sse(evt)
-                except Exception:
-                    log.exception("Refinement failed")
-                    yield sse({"type": "status", "message": "Refinement skipped, showing the first draft."})
-
+            yield sse({"type": "code", "code": extract_html("".join(parts))})
             yield sse({"type": "done"})
         except Exception:
             # Log the real error on the server; send a safe message to the browser.
