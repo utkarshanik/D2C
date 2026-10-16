@@ -1,15 +1,19 @@
-"""Module 5: the refine loop.
+"""Module 5: refine, one step per button click.
 
-draft code -> render it -> score it against the original -> if it is not close
-enough, show the model BOTH images and ask for a fix -> render and score the fix
--> keep whichever version scores best. Stops early when it is good enough, when
-a round brings no improvement, or after REFINE_ROUNDS rounds.
+The user decides when to refine, so one call = at most one model call.
 
-Each round costs one model call, and free tiers are limited, so the loop never
-runs longer than it has to.
+Two modes, depending on whether the user typed an instruction:
+  * no instruction: "match the original". Render the current code, score it
+    (SSIM) against the original, and if it is not close enough ask the model to
+    fix the differences. Keep the fix only if it scores higher.
+  * with instruction: "apply my change". The user wants a deliberate change, so
+    similarity to the original cannot judge the result. Apply it and return it;
+    the frontend keeps the previous version so the user can undo.
 """
 import io
 import logging
+from datetime import datetime
+from pathlib import Path
 from typing import AsyncIterator
 
 # numpy: pixel data as arrays, which is the form scikit-image works on.
@@ -23,12 +27,38 @@ from skimage.metrics import structural_similarity
 
 from app.config import settings
 from app.prompts.html_tailwind import SYSTEM_PROMPT
-from app.prompts.refine import HINT_BLOCK, REFINE_PROMPT
+from app.prompts.refine import EDIT_PROMPT, MATCH_PROMPT
 from app.services.llm import generate_code
 from app.services.postprocess import extract_html
 from app.services.renderer import RenderError, render_html
 
 log = logging.getLogger(__name__)
+
+_EXT = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
+
+
+class _Dump:
+    """Optional debug output. When REFINE_DEBUG_DIR is set, every file the loop
+    sends to or receives from the model is saved in debug/<timestamp>/ so you can
+    open the images and read the prompt and reply. Off (a no-op) by default,
+    because it stores your screenshots on disk.
+    """
+
+    def __init__(self, base: str):
+        self.dir = None
+        if base:
+            self.dir = Path(base) / datetime.now().strftime("%Y%m%d-%H%M%S")
+            self.dir.mkdir(parents=True, exist_ok=True)
+            log.info("Refine debug files: %s", self.dir.resolve())
+
+    def save(self, name: str, content: bytes | str) -> None:
+        if self.dir is None:
+            return
+        path = self.dir / name
+        if isinstance(content, str):
+            path.write_text(content, encoding="utf-8")
+        else:
+            path.write_bytes(content)
 
 
 def _to_gray(data: bytes) -> np.ndarray:
@@ -54,52 +84,69 @@ def ssim_score(original: bytes, render: bytes) -> float:
     return float(structural_similarity(a, b, win_size=win, data_range=255))
 
 
-async def refine_events(
-    original: bytes, mime: str, width: int, height: int, code: str, hint: str = ""
+async def refine_step(
+    original: bytes, mime: str, width: int, height: int, code: str, instruction: str = ""
 ) -> AsyncIterator[dict]:
-    """Yield SSE-ready event dicts: status, score and (only when improved) code."""
-    rounds = settings.REFINE_ROUNDS
-    target = settings.REFINE_TARGET_SCORE
+    """Yield SSE-ready event dicts: status, score (match mode only) and code (when changed)."""
+    instruction = instruction.strip()
+    dump = _Dump(settings.REFINE_DEBUG_DIR)
+    dump.save(f"original.{_EXT.get(mime, 'img')}", original)
+    dump.save("current.html", code)
 
-    yield {"type": "status", "message": "Rendering the draft to compare it..."}
+    yield {"type": "status", "message": "Rendering the current version..."}
     try:
         render = await render_html(code, width, height)
     except RenderError:
-        yield {"type": "status", "message": "Could not render the draft, so refinement was skipped."}
+        yield {"type": "status", "message": "Could not render the current version, so nothing was changed."}
+        return
+    dump.save("current_render.png", render)
+
+    best_score = None
+    if not instruction:
+        best_score = ssim_score(original, render)
+        yield {"type": "score", "round": 0, "score": round(best_score, 3)}
+        if best_score >= settings.REFINE_TARGET_SCORE:
+            yield {"type": "status", "message": "Already close to the original, nothing to fix."}
+            return
+        prompt = MATCH_PROMPT.format(code=code)
+        yield {"type": "status", "message": "Asking the model to fix the differences..."}
+    else:
+        prompt = EDIT_PROMPT.format(code=code, instruction=instruction)
+        yield {"type": "status", "message": "Applying your change..."}
+
+    # Image 1 = original, image 2 = current render (the order both prompts describe).
+    images = [(original, mime), (render, "image/png")]
+    log.info(
+        "Refine (%s): sending %d images (%s), prompt %d chars%s",
+        "match" if not instruction else "edit", len(images),
+        ", ".join(f"{len(b)} bytes {m}" for b, m in images), len(prompt),
+        f", current score {best_score:.3f}" if best_score is not None else "",
+    )
+    dump.save(f"sent_image1_original.{_EXT.get(mime, 'img')}", original)
+    dump.save("sent_image2_render.png", render)
+    dump.save("prompt.txt", f"SYSTEM:\n{SYSTEM_PROMPT}\n\nUSER:\n{prompt}")
+
+    reply = await generate_code(SYSTEM_PROMPT, prompt, images)
+    dump.save("reply.txt", reply)  # the raw reply, before the fence is stripped
+    candidate = extract_html(reply)
+    dump.save("candidate.html", candidate)
+    if not candidate.strip():
+        yield {"type": "status", "message": "The model returned no code, so nothing was changed."}
         return
 
-    best_code, best_render = code, render
-    best_score = ssim_score(original, render)
-    yield {"type": "score", "round": 0, "score": round(best_score, 3)}
+    if instruction:
+        yield {"type": "code", "code": candidate}
+        return
 
-    for round_no in range(1, rounds + 1):
-        if best_score >= target:
-            yield {"type": "status", "message": "Close enough to the original."}
-            break
-
-        yield {"type": "status", "message": f"Refining ({round_no}/{rounds})..."}
-        prompt = REFINE_PROMPT.format(
-            code=best_code, hint_block=HINT_BLOCK.format(hint=hint) if hint else ""
-        )
-        # Image 1 = target, image 2 = current render (the order the prompt describes).
-        reply = await generate_code(
-            SYSTEM_PROMPT, prompt, [(original, mime), (best_render, "image/png")]
-        )
-        candidate = extract_html(reply)
-
-        try:
-            cand_render = await render_html(candidate, width, height)
-        except RenderError:
-            yield {"type": "status", "message": "The fix could not be rendered, so it was discarded."}
-            break
-        cand_score = ssim_score(original, cand_render)
-        yield {"type": "score", "round": round_no, "score": round(cand_score, 3)}
-
-        if cand_score > best_score:
-            best_code, best_render, best_score = candidate, cand_render, cand_score
-            yield {"type": "code", "code": best_code}
-        else:
-            # A "fix" that looks worse is thrown away, and we stop: asking again
-            # with the same inputs would likely repeat the mistake and burn quota.
-            yield {"type": "status", "message": "No improvement, keeping the previous version."}
-            break
+    try:
+        cand_render = await render_html(candidate, width, height)
+    except RenderError:
+        yield {"type": "status", "message": "The fix could not be rendered, so it was discarded."}
+        return
+    dump.save("candidate_render.png", cand_render)
+    cand_score = ssim_score(original, cand_render)
+    yield {"type": "score", "round": 1, "score": round(cand_score, 3)}
+    if cand_score > best_score:
+        yield {"type": "code", "code": candidate}
+    else:
+        yield {"type": "status", "message": "No improvement, keeping the current version."}

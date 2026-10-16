@@ -11,9 +11,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     PRIMARY_MODEL: str = "gemini/gemini-3.6-flash"
     FALLBACK_MODEL: str = "ollama/qwen2.5vl"
-    REFINE_ROUNDS: int = 2
+    # REFINE_ROUNDS: int = 2
     MAX_RETRIES: int = 2  # retries per model before moving to the fallback
     REFINE_TARGET_SCORE: float = 0.95
+    REFINE_DEBUG_DIR: str = ""  # e.g. "debug": saves what each refine round sends and receive
 
 
 settings = Settings()

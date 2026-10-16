@@ -10,16 +10,25 @@ type Tab = "preview" | "code";
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [hint, setHint] = useState("");
+  const [instruction, setInstruction] = useState(""); // for the Refine button
   const [manualTab, setManualTab] = useState<Tab | null>(null);
-  const { code, previewCode, meta, scores, status, error, busy, generate, stop } = useGenerate();
+  const { code, previewCode, meta, scores, status, error, busy, canUndo, generate, refine, undo, stop } =
+    useGenerate();
 
-  // Until the user clicks a tab: show the code while streaming, the preview when finished
-  const tab: Tab = manualTab ?? (busy ? "code" : "preview");
+  // Until the user clicks a tab: show the code while the first draft streams, the preview otherwise
+  // (during a refine the preview stays up, and updates when the new code arrives)
+  const tab: Tab = manualTab ?? (busy && !previewCode ? "code" : "preview");
 
   const onGenerate = () => {
     if (!file) return;
     setManualTab(null);
+    setInstruction("");
     void generate(file, hint);
+  };
+
+  const onRefine = () => {
+    if (!file) return;
+    void refine(file, instruction);
   };
 
   return (
@@ -29,7 +38,7 @@ export default function App() {
         <Uploader file={file} onSelect={setFile} disabled={busy} />
         {meta && <p className="muted">Original: {meta.width} × {meta.height}px</p>}
         <textarea
-          placeholder="Optional hint, e.g. dark theme"
+          placeholder="Optional hint for the first draft, e.g. dark theme"
           value={hint}
           onChange={(e) => setHint(e.target.value)}
           disabled={busy}
@@ -39,6 +48,23 @@ export default function App() {
           <button onClick={onGenerate} disabled={!file || busy}>{busy ? "Working..." : "Generate code"}</button>
           {busy && <button onClick={stop} className="secondary">Stop</button>}
         </div>
+        {previewCode && (
+          <section className="refine">
+            <h3>Refine</h3>
+            <textarea
+              placeholder="What should change? Leave empty to match the original more closely."
+              value={instruction}
+              onChange={(e) => setInstruction(e.target.value)}
+              disabled={busy}
+              maxLength={1000}
+              rows={3}
+            />
+            <div className="row">
+              <button onClick={onRefine} disabled={!file || busy}>Refine</button>
+              <button onClick={undo} disabled={busy || !canUndo} className="secondary">Undo</button>
+            </div>
+          </section>
+        )}
         {scores.length > 0 && (
           // SSIM can dip below 0 for very different images, so clamp before showing a percentage
           <p className="muted">Match with original: {scores.map((s) => `${Math.round(Math.max(0, s) * 100)}%`).join(" → ")}</p>

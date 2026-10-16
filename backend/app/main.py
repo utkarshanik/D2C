@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routes.generate import router as generate_router
 from app.routes.render import router as render_router
+from app.routes.refine import router as refine_router
 import logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
@@ -16,6 +17,7 @@ app.add_middleware(
 # Register the generate router
 app.include_router(generate_router)
 app.include_router(render_router)
+app.include_router(refine_router)
 
 @app.get("/health")
 def health():
