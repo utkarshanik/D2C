@@ -1,7 +1,7 @@
 // Mirrors the SSE events sent by backend/app/routes/generate.py.
 // A "discriminated union": checking `evt.type` tells TypeScript which fields exist.
 export type SseEvent =
-    | { type: "meta"; width: number; height: number }
+    | { type: "meta"; width: number; height: number; project_id?: string }
     | { type: "status"; message: string }
     | { type: "chunk"; delta: string }
     | { type: "code"; code: string }
@@ -10,3 +10,31 @@ export type SseEvent =
     | { type: "error"; message: string };
 
 export type ImageMeta = { width: number; height: number };
+
+export type ProjectSummary = {
+    id: string;
+    created_at: string;
+    width: number;
+    height: number;
+    mime: string;
+    hint: string;
+    version_count: number;
+};
+
+export type ProjectVersion = {
+    id: number;
+    number: number;
+    created_at: string;
+    code: string;
+    instruction: string;
+};
+
+export type ProjectDetail = ProjectSummary & {
+    target: string;
+    versions: ProjectVersion[];
+};
+
+export type OpenedProject = {
+    hint: string;
+    file: File | null;
+};

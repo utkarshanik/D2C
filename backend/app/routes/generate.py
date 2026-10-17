@@ -6,13 +6,14 @@ Server-Sent Events (SSE). The route stays thin: validation + streaming only.
 The real work happens in services/llm.py.
 
 SSE events (each is one line: `data: {json}` followed by a blank line):
-  {"type": "meta",   "width": 1280, "height": 720}   image size (the renderer needs it later)
+  {"type": "meta",   "width": 1280, "height": 720, "project_id": "<id>"}
   {"type": "status", "message": "..."}               progress text for the UI
   {"type": "chunk",  "delta": "..."}                 raw tokens as they arrive (live typing)
   {"type": "code",   "code": "<html>..."}            cleaned final code
   {"type": "done"}
   {"type": "error",  "message": "..."}
 """
+import asyncio
 import io
 import json
 import logging
@@ -31,6 +32,7 @@ from app.prompts.html_tailwind import SYSTEM_PROMPT, build_user_prompt
 from app.services.llm import generate_from_image
 from app.services.postprocess import extract_html
 from app.services.preprocess import preprocess_image
+from app.services.projects import add_version, create_project, delete_project
 
 # Note: reading the upload needs the `python-multipart` package installed.
 # FastAPI imports it behind the scenes; without it, this route fails at startup.
@@ -72,8 +74,12 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
     width, height, mime = inspect_image(data)
 
     async def event_stream():
+        # Created before any tokens so a failed or abandoned run can be removed again.
+        project_id = None
+        saved = False
         try:
-            yield sse({"type": "meta", "width": width, "height": height})
+            project_id = await asyncio.to_thread(create_project, data, mime, width, height, hint)
+            yield sse({"type": "meta", "width": width, "height": height, "project_id": project_id})
             yield sse({"type": "status", "message": "Analyzing colors and text..."})
 
             measurements = await preprocess_image(data)
@@ -93,12 +99,19 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
                 parts.append(delta)
                 yield sse({"type": "chunk", "delta": delta})
 
-            yield sse({"type": "code", "code": extract_html("".join(parts))})
+            code = extract_html("".join(parts))
+            if code.strip():
+                await asyncio.to_thread(add_version, project_id, code, hint)
+                saved = True
+            yield sse({"type": "code", "code": code})
             yield sse({"type": "done"})
         except Exception:
             # Log the real error on the server; send a safe message to the browser.
             log.exception("Generation failed")
             yield sse({"type": "error", "message": "Generation failed. Please try again."})
+        finally:
+            if project_id and not saved:
+                await asyncio.to_thread(delete_project, project_id)
         # If the browser disconnects, Starlette cancels this generator, which stops the
         # model call too, so we don't keep spending free-tier quota on an abandoned request.
 

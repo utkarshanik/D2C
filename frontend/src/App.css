@@ -117,3 +117,25 @@ button.secondary {
   margin: 0;
   font-size: 15px;
 }
+
+.projects {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.projects h3 {
+  margin: 0;
+  font-size: 15px;
+}
+
+button.project {
+  text-align: left;
+  background: transparent;
+  border: 1px solid #ddd;
+}
+
+button.project.active {
+  border-color: #333;
+  font-weight: 600;
+}

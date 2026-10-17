@@ -77,7 +77,10 @@ def test_streams_meta_chunks_code_done(monkeypatch):
     assert r.status_code == 200
     assert r.headers["content-type"].startswith("text/event-stream")
     evts = events(r)
-    assert evts[0] == {"type": "meta", "width": 40, "height": 20}
+    assert evts[0]["type"] == "meta"
+    assert evts[0]["width"] == 40
+    assert evts[0]["height"] == 20
+    assert len(evts[0]["project_id"]) == 32
     assert [e["delta"] for e in evts if e["type"] == "chunk"] == ["```html\n<p>", "hi</p>\n```"]
     assert {"type": "code", "code": "<p>hi</p>"} in evts
     assert evts[-1] == {"type": "done"}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ImageMeta, SseEvent } from "../types";
+import type { ImageMeta, OpenedProject, ProjectDetail, ProjectSummary, SseEvent } from "../types";
 
 // import.meta.env.VITE_* values come from frontend/.env (Vite exposes only VITE_ ones)
 const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -13,12 +13,21 @@ export function useGenerate() {
     const [status, setStatus] = useState("");
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
+    const [projectId, setProjectId] = useState<string | null>(null);
+    const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
     // useRef: values we must READ inside callbacks without causing re-renders
     const abortRef = useRef<AbortController | null>(null);
     const previewRef = useRef(""); // always the latest clean code (state could be stale inside callbacks)
     const refiningRef = useRef(false); // is the current request a /refine call?
     const changedRef = useRef(false); // did this refine call actually change the code?
+    const projectIdRef = useRef<string | null>(null);
+    const wasBusyRef = useRef(false);
+
+    const rememberProject = useCallback((id: string | null) => {
+        projectIdRef.current = id;
+        setProjectId(id);
+    }, []);
 
     const stop = useCallback(() => abortRef.current?.abort(), []);
     useEffect(() => () => abortRef.current?.abort(), []); // cancel the request if the page unmounts
@@ -27,6 +36,7 @@ export function useGenerate() {
         switch (evt.type) {
             case "meta":
                 setMeta({ width: evt.width, height: evt.height });
+                if (evt.project_id) rememberProject(evt.project_id);
                 break;
             case "status":
                 setStatus(evt.message);
@@ -50,6 +60,8 @@ export function useGenerate() {
                 setScores((prev) => [...prev, evt.score]);
                 break;
             case "done":
+                // A failed draft is deleted on the server, so forget its id.
+                if (!previewRef.current.trim()) rememberProject(null);
                 // After a refine that changed nothing, the last status explains why
                 // ("No improvement...", "Already close..."), so do not overwrite it.
                 if (!refiningRef.current) setStatus("Done");
@@ -58,9 +70,10 @@ export function useGenerate() {
             case "error":
                 setError(evt.message);
                 setStatus("");
+                if (!previewRef.current.trim()) rememberProject(null);
                 break;
         }
-    }, []);
+    }, [rememberProject]);
 
     // Shared by generate and refine: POST a form, read the SSE stream, feed each event to handleEvent.
     const run = useCallback(
@@ -124,6 +137,25 @@ export function useGenerate() {
         [handleEvent],
     );
 
+    const refreshProjects = useCallback(async () => {
+        try {
+            const res = await fetch(`${API_URL}/projects`);
+            if (!res.ok) return;
+            setProjects((await res.json()) as ProjectSummary[]);
+        } catch {
+            // The list is a convenience. Generate and refine already surface their own errors.
+        }
+    }, []);
+
+    useEffect(() => {
+        void refreshProjects();
+    }, [refreshProjects]);
+
+    useEffect(() => {
+        if (wasBusyRef.current && !busy) void refreshProjects();
+        wasBusyRef.current = busy;
+    }, [busy, refreshProjects]);
+
     // First run: screenshot (+ optional hint) in, first draft out. Starts a fresh session.
     const generate = useCallback(
         async (file: File, hint: string) => {
@@ -132,28 +164,63 @@ export function useGenerate() {
             previewRef.current = "";
             setHistory([]);
             setMeta(null);
+            rememberProject(null);
 
             const form = new FormData(); // browser API: builds the multipart body FastAPI expects
             form.append("image", file);
             if (hint.trim()) form.append("hint", hint.trim());
             await run("/generate", form, false);
         },
-        [run],
+        [rememberProject, run],
     );
 
-    // Refine button: send the screenshot again plus the CURRENT code (the server keeps no state).
+    // Refine uses the saved project: the server loads the screenshot and earlier requests.
+    // The code on screen is sent too, so Undo still chooses which version the edit starts from.
     // With an instruction the model applies it; without one it tries to match the original better.
     const refine = useCallback(
-        async (file: File, instruction: string) => {
+        async (file: File | null, instruction: string) => {
             if (!previewRef.current) return;
             const form = new FormData();
-            form.append("image", file);
             form.append("code", previewRef.current);
             if (instruction.trim()) form.append("instruction", instruction.trim());
+            const id = projectIdRef.current;
+            if (id) {
+                await run(`/projects/${id}/edit`, form, true);
+                return;
+            }
+            if (!file) return;
+            form.append("image", file);
             await run("/refine", form, true);
         },
         [run],
     );
+
+    const openProject = useCallback(async (id: string): Promise<OpenedProject | null> => {
+        setError("");
+        const res = await fetch(`${API_URL}/projects/${id}`);
+        if (!res.ok) {
+            setError("Could not open that project.");
+            return null;
+        }
+        const project = (await res.json()) as ProjectDetail;
+        const versions = project.versions;
+        const latestCode = versions[versions.length - 1]?.code ?? "";
+        rememberProject(project.id);
+        previewRef.current = latestCode;
+        setCode(latestCode);
+        setPreviewCode(latestCode);
+        setHistory(versions.slice(0, -1).map((version) => version.code));
+        setMeta({ width: project.width, height: project.height });
+        setScores([]);
+        setStatus(latestCode ? "Opened a saved project." : "");
+
+        const imageRes = await fetch(`${API_URL}/projects/${id}/image`);
+        if (!imageRes.ok) return { hint: project.hint, file: null };
+        const blob = await imageRes.blob();
+        const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/webp" ? "webp" : "png";
+        const file = new File([blob], `design.${ext}`, { type: blob.type || "image/png" });
+        return { hint: project.hint, file };
+    }, [rememberProject]);
 
     // Go back to the version before the last refine. Pure frontend: no request needed.
     const undo = useCallback(() => {
@@ -169,7 +236,8 @@ export function useGenerate() {
 
     return {
         code, previewCode, meta, scores, status, error, busy,
+        projectId, projects,
         canUndo: history.length > 0,
-        generate, refine, undo, stop,
+        generate, refine, undo, stop, openProject,
     };
 }

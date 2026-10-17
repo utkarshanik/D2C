@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     MAX_RETRIES: int = 2  # retries per model before moving to the fallback
     REFINE_TARGET_SCORE: float = 0.95
     REFINE_DEBUG_DIR: str = ""  # e.g. "debug": saves what each refine round sends and receive
+    DATABASE_URL: str = "sqlite:///./data/d2c.db"
+    DATA_DIR: str = "data"  # screenshots live in DATA_DIR/projects/<id>/
 
 
 settings = Settings()
