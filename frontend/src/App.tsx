@@ -12,8 +12,10 @@ export default function App() {
   const [hint, setHint] = useState("");
   const [instruction, setInstruction] = useState(""); // for the Refine button
   const [manualTab, setManualTab] = useState<Tab | null>(null);
-  const { code, previewCode, meta, scores, status, error, busy, canUndo, generate, refine, undo, stop } =
-    useGenerate();
+  const {
+    code, previewCode, meta, scores, status, error, busy, projectId, projects,
+    canUndo, generate, refine, undo, stop, openProject,
+  } = useGenerate();
 
   // Until the user clicks a tab: show the code while the first draft streams, the preview otherwise
   // (during a refine the preview stays up, and updates when the new code arrives)
@@ -27,14 +29,41 @@ export default function App() {
   };
 
   const onRefine = () => {
-    if (!file) return;
+    if (!previewCode || (!file && !projectId)) return;
     void refine(file, instruction);
+  };
+
+  const onOpenProject = async (id: string) => {
+    const opened = await openProject(id);
+    if (!opened) return;
+    setFile(opened.file);
+    setHint(opened.hint);
+    setInstruction("");
+    setManualTab("preview");
   };
 
   return (
     <div className="app">
       <aside className="sidebar">
         <h2>Design to code</h2>
+        {projects.length > 0 && (
+          <section className="projects">
+            <h3>Saved projects</h3>
+            {projects.map((project) => (
+              <button
+                key={project.id}
+                type="button"
+                className={project.id === projectId ? "project active" : "project"}
+                onClick={() => void onOpenProject(project.id)}
+                disabled={busy}
+                aria-current={project.id === projectId ? "true" : undefined}
+              >
+                {project.width}×{project.height} · {project.version_count}{" "}
+                {project.version_count === 1 ? "version" : "versions"}
+              </button>
+            ))}
+          </section>
+        )}
         <Uploader file={file} onSelect={setFile} disabled={busy} />
         {meta && <p className="muted">Original: {meta.width} × {meta.height}px</p>}
         <textarea
@@ -60,7 +89,7 @@ export default function App() {
               rows={3}
             />
             <div className="row">
-              <button onClick={onRefine} disabled={!file || busy}>Refine</button>
+              <button onClick={onRefine} disabled={busy || !previewCode || (!file && !projectId)}>Refine</button>
               <button onClick={undo} disabled={busy || !canUndo} className="secondary">Undo</button>
             </div>
           </section>
