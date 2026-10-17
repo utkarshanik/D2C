@@ -33,6 +33,7 @@ class EditContext:
     height: int
     code: str
     instruction: str
+    target: str
 
 
 def compose_follow_up(prior: list[str], instruction: str) -> str:
@@ -68,7 +69,14 @@ def _project_dir(project_id: str) -> Path:
     return path
 
 
-def create_project(image: bytes, mime: str, width: int, height: int, hint: str) -> str:
+def create_project(
+    image: bytes,
+    mime: str,
+    width: int,
+    height: int,
+    hint: str,
+    target: str = "html_tailwind",
+) -> str:
     """Store the screenshot on disk and insert the project row. Returns the id."""
     init_db()
     project_id = uuid4().hex
@@ -86,6 +94,7 @@ def create_project(image: bytes, mime: str, width: int, height: int, hint: str) 
                 mime=mime,
                 image_name=image_name,
                 hint=hint.strip(),
+                target=target,
             ))
             db.commit()
     except Exception:
@@ -141,6 +150,7 @@ def _project_summary(project: Project) -> dict:
         "height": project.height,
         "mime": project.mime,
         "hint": project.hint,
+        "target": project.target,
         "version_count": len(project.versions),
     }
 
@@ -179,7 +189,6 @@ def get_project(project_id: str) -> dict | None:
         if project is None:
             return None
         body = _project_summary(project)
-        body["target"] = project.target
         body["versions"] = [_version_dict(version) for version in project.versions]
         return body
 
@@ -222,6 +231,7 @@ def prepare_edit(project_id: str, instruction: str, code: str) -> EditContext:
         mime = project.mime
         width = project.width
         height = project.height
+        target = project.target or "html_tailwind"
         versions = list(project.versions)
 
     chosen = versions[-1]
@@ -251,4 +261,5 @@ def prepare_edit(project_id: str, instruction: str, code: str) -> EditContext:
         height=height,
         code=base_code,
         instruction=compose_follow_up(prior, instruction),
+        target=target,
     )

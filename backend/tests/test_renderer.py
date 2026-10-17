@@ -23,6 +23,7 @@ needs_chromium = pytest.mark.skipif(not _chromium_works(), reason="Chromium not 
 
 def test_allowlist():
     assert renderer._is_allowed("https://cdn.tailwindcss.com/")
+    assert renderer._is_allowed("https://unpkg.com/react@18.3.1/umd/react.production.min.js")
     assert renderer._is_allowed("data:image/png;base64,AAAA")
     assert not renderer._is_allowed("file:///etc/passwd")
     assert not renderer._is_allowed("http://localhost:8000/health")

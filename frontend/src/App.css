@@ -139,3 +139,30 @@ button.project.active {
   border-color: #333;
   font-weight: 600;
 }
+
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #444;
+}
+
+.target select {
+  font: inherit;
+  padding: 8px;
+}
+
+.react-preview,
+.react-preview .sp-wrapper,
+.react-preview .sp-layout,
+.react-preview .sp-stack,
+.react-preview .sp-preview-container,
+.react-preview .sp-preview-iframe {
+  height: 100%;
+}
+
+.react-preview .sp-layout {
+  border: 0;
+  background: #fff;
+}

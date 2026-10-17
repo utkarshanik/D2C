@@ -4,7 +4,7 @@
 MATCH_PROMPT = """Image 1 is the TARGET design. Image 2 is a screenshot of how the CURRENT code renders.
 Compare them carefully: layout, alignment, spacing, sizes, colors, borders and text.
 Fix every visible difference. Keep anything that already matches.
-Return the FULL corrected HTML in one ```html fenced block. No explanations.
+Return the FULL corrected {kind} in one ```{fence} fenced block. No explanations.
 
 Current code:
 {code}"""
@@ -17,7 +17,7 @@ Apply this change request from the user:
 
 Change only what the request needs and keep everything else as it is.
 If the request conflicts with the original design, the request wins.
-Return the FULL updated HTML in one ```html fenced block. No explanations.
+Return the FULL updated {kind} in one ```{fence} fenced block. No explanations.
 
 Current code:
 {code}"""

@@ -37,6 +37,7 @@ ALLOWED_HOSTS = {
     "fonts.googleapis.com",
     "fonts.gstatic.com",
     "placehold.co",
+    "unpkg.com",  # React, MUI and Babel for the React screenshot page
 }
 
 _slots = asyncio.Semaphore(MAX_CONCURRENT)
@@ -55,14 +56,21 @@ def _is_allowed(url: str) -> bool:
     return False  # file:, ftp:, chrome:, ...
 
 
-def _render_sync(html: str, width: int, height: int) -> bytes:
+def _render_sync(
+    html: str,
+    width: int,
+    height: int,
+    wait_for: str | None = None,
+    timeout_ms: int | None = None,
+) -> bytes:
+    timeout = TIMEOUT_MS if timeout_ms is None else timeout_ms
     with sync_playwright() as p:
         browser = p.chromium.launch()
         try:
             # A fresh context per render: no cookies or storage shared between renders.
             context = browser.new_context(viewport={"width": width, "height": height})
             page = context.new_page()
-            page.set_default_timeout(TIMEOUT_MS)
+            page.set_default_timeout(timeout)
 
             def guard(route):
                 if _is_allowed(route.request.url):
@@ -73,8 +81,11 @@ def _render_sync(html: str, width: int, height: int) -> bytes:
 
             page.route("**/*", guard)
 
-            # networkidle: wait until Tailwind's script (and any fonts) finished loading
-            page.set_content(html, wait_until="networkidle", timeout=TIMEOUT_MS)
+            # networkidle: wait until Tailwind's script (and any fonts) finished loading.
+            # A React page also waits for window.__ready, because Babel runs after the scripts.
+            page.set_content(html, wait_until="networkidle", timeout=timeout)
+            if wait_for:
+                page.wait_for_function(wait_for, timeout=timeout)
             page.evaluate("document.fonts.ready")  # web fonts applied before the shot
 
             # full_page=False keeps the PNG exactly width x height, the same
@@ -84,7 +95,13 @@ def _render_sync(html: str, width: int, height: int) -> bytes:
             browser.close()
 
 
-async def render_html(html: str, width: int, height: int) -> bytes:
+async def render_html(
+    html: str,
+    width: int,
+    height: int,
+    wait_for: str | None = None,
+    timeout_ms: int | None = None,
+) -> bytes:
     """Render `html` in a width x height viewport and return PNG bytes."""
     if not (1 <= width <= MAX_DIM and 1 <= height <= MAX_DIM):
         raise ValueError(f"width and height must be between 1 and {MAX_DIM}")
@@ -92,7 +109,7 @@ async def render_html(html: str, width: int, height: int) -> bytes:
         try:
             # to_thread: the sync Playwright call blocks, so run it off the event
             # loop. Otherwise streaming for every other request would freeze.
-            return await asyncio.to_thread(_render_sync, html, width, height)
+            return await asyncio.to_thread(_render_sync, html, width, height, wait_for, timeout_ms)
         except PlaywrightTimeout as exc:
             raise RenderError("The page took too long to render") from exc
         except PlaywrightError as exc:

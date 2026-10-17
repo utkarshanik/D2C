@@ -26,11 +26,12 @@ from PIL import Image
 from skimage.metrics import structural_similarity
 
 from app.config import settings
-from app.prompts.html_tailwind import SYSTEM_PROMPT
 from app.prompts.refine import EDIT_PROMPT, MATCH_PROMPT
 from app.services.llm import generate_code
-from app.services.postprocess import extract_html
-from app.services.renderer import RenderError, render_html
+from app.services.postprocess import extract_code
+from app.services.react_harness import render_code
+from app.services.renderer import RenderError
+from app.targets import get_target
 
 log = logging.getLogger(__name__)
 
@@ -85,17 +86,24 @@ def ssim_score(original: bytes, render: bytes) -> float:
 
 
 async def refine_step(
-    original: bytes, mime: str, width: int, height: int, code: str, instruction: str = ""
+    original: bytes,
+    mime: str,
+    width: int,
+    height: int,
+    code: str,
+    instruction: str = "",
+    target_id: str = "html_tailwind",
 ) -> AsyncIterator[dict]:
     """Yield SSE-ready event dicts: status, score (match mode only) and code (when changed)."""
     instruction = instruction.strip()
+    target = get_target(target_id)
     dump = _Dump(settings.REFINE_DEBUG_DIR)
     dump.save(f"original.{_EXT.get(mime, 'img')}", original)
-    dump.save("current.html", code)
+    dump.save(f"current.{target.fence}", code)
 
     yield {"type": "status", "message": "Rendering the current version..."}
     try:
-        render = await render_html(code, width, height)
+        render = await render_code(target.id, code, width, height)
     except RenderError:
         yield {"type": "status", "message": "Could not render the current version, so nothing was changed."}
         return
@@ -108,10 +116,10 @@ async def refine_step(
         if best_score >= settings.REFINE_TARGET_SCORE:
             yield {"type": "status", "message": "Already close to the original, nothing to fix."}
             return
-        prompt = MATCH_PROMPT.format(code=code)
+        prompt = MATCH_PROMPT.format(code=code, kind=target.kind, fence=target.fence)
         yield {"type": "status", "message": "Asking the model to fix the differences..."}
     else:
-        prompt = EDIT_PROMPT.format(code=code, instruction=instruction)
+        prompt = EDIT_PROMPT.format(code=code, instruction=instruction, kind=target.kind, fence=target.fence)
         yield {"type": "status", "message": "Applying your change..."}
 
     # Image 1 = original, image 2 = current render (the order both prompts describe).
@@ -124,12 +132,12 @@ async def refine_step(
     )
     dump.save(f"sent_image1_original.{_EXT.get(mime, 'img')}", original)
     dump.save("sent_image2_render.png", render)
-    dump.save("prompt.txt", f"SYSTEM:\n{SYSTEM_PROMPT}\n\nUSER:\n{prompt}")
+    dump.save("prompt.txt", f"SYSTEM:\n{target.system_prompt}\n\nUSER:\n{prompt}")
 
-    reply = await generate_code(SYSTEM_PROMPT, prompt, images)
+    reply = await generate_code(target.system_prompt, prompt, images)
     dump.save("reply.txt", reply)  # the raw reply, before the fence is stripped
-    candidate = extract_html(reply)
-    dump.save("candidate.html", candidate)
+    candidate = extract_code(reply)
+    dump.save(f"candidate.{target.fence}", candidate)
     if not candidate.strip():
         yield {"type": "status", "message": "The model returned no code, so nothing was changed."}
         return
@@ -139,7 +147,7 @@ async def refine_step(
         return
 
     try:
-        cand_render = await render_html(candidate, width, height)
+        cand_render = await render_code(target.id, candidate, width, height)
     except RenderError:
         yield {"type": "status", "message": "The fix could not be rendered, so it was discarded."}
         return

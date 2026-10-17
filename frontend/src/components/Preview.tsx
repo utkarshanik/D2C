@@ -1,5 +1,18 @@
-export function Preview({ html }: { html: string }) {
+import { lazy, Suspense } from "react";
+import { previewKind } from "../targets";
+
+const ReactPreview = lazy(() => import("./ReactPreview"));
+
+export function Preview({ html, target }: { html: string; target: string }) {
     if (!html) return <div className="empty">The preview appears here when generation finishes.</div>;
+
+    if (previewKind(target) === "react") {
+        return (
+            <Suspense fallback={<div className="empty">Loading preview...</div>}>
+                <ReactPreview code={html} />
+            </Suspense>
+        );
+    }
 
     // sandbox="allow-scripts" (and NOT allow-same-origin): the Tailwind script can run, but the
     // generated page can't read your app's cookies, storage or DOM. Model output is untrusted.

@@ -28,11 +28,11 @@ from fastapi.responses import StreamingResponse
 # We don't trust the filename or the client's content-type header.
 from PIL import Image, UnidentifiedImageError
 
-from app.prompts.html_tailwind import SYSTEM_PROMPT, build_user_prompt
 from app.services.llm import generate_from_image
-from app.services.postprocess import extract_html
+from app.services.postprocess import extract_code
 from app.services.preprocess import preprocess_image
 from app.services.projects import add_version, create_project, delete_project
+from app.targets import UnknownTarget, get_target
 
 # Note: reading the upload needs the `python-multipart` package installed.
 # FastAPI imports it behind the scenes; without it, this route fails at startup.
@@ -65,25 +65,41 @@ def inspect_image(data: bytes) -> tuple[int, int, str]:
 
 
 @router.post("/generate")
-async def generate(image: UploadFile = File(...), hint: str = Form("")):
+async def generate(
+    image: UploadFile = File(...),
+    hint: str = Form(""),
+    target: str = Form(""),
+):
     # Read at most MAX_BYTES + 1 so an oversized upload is detected without loading it all.
     data = await image.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
         raise HTTPException(413, "Image is too large (max 5 MB).")
 
     width, height, mime = inspect_image(data)
+    try:
+        chosen = get_target(target)
+    except UnknownTarget:
+        raise HTTPException(400, "Unknown target. Use html_tailwind or react_mui.")
 
     async def event_stream():
         # Created before any tokens so a failed or abandoned run can be removed again.
         project_id = None
         saved = False
         try:
-            project_id = await asyncio.to_thread(create_project, data, mime, width, height, hint)
-            yield sse({"type": "meta", "width": width, "height": height, "project_id": project_id})
+            project_id = await asyncio.to_thread(
+                create_project, data, mime, width, height, hint, chosen.id
+            )
+            yield sse({
+                "type": "meta",
+                "width": width,
+                "height": height,
+                "project_id": project_id,
+                "target": chosen.id,
+            })
             yield sse({"type": "status", "message": "Analyzing colors and text..."})
 
             measurements = await preprocess_image(data)
-            prompt = build_user_prompt(
+            prompt = chosen.build_user_prompt(
                 width=measurements.width,
                 height=measurements.height,
                 palette=measurements.palette,
@@ -95,11 +111,11 @@ async def generate(image: UploadFile = File(...), hint: str = Form("")):
             yield sse({"type": "status", "message": "Generating code..."})
 
             parts: list[str] = []
-            async for delta in generate_from_image(data, mime, prompt, SYSTEM_PROMPT):
+            async for delta in generate_from_image(data, mime, prompt, chosen.system_prompt):
                 parts.append(delta)
                 yield sse({"type": "chunk", "delta": delta})
 
-            code = extract_html("".join(parts))
+            code = extract_code("".join(parts))
             if code.strip():
                 await asyncio.to_thread(add_version, project_id, code, hint)
                 saved = True

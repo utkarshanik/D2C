@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ImageMeta, OpenedProject, ProjectDetail, ProjectSummary, SseEvent } from "../types";
+import { HTML_TAILWIND } from "../targets";
 
 // import.meta.env.VITE_* values come from frontend/.env (Vite exposes only VITE_ ones)
 const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -15,6 +16,8 @@ export function useGenerate() {
     const [busy, setBusy] = useState(false);
     const [projectId, setProjectId] = useState<string | null>(null);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [target, setTargetState] = useState(HTML_TAILWIND);
+    const [previewTarget, setPreviewTarget] = useState(HTML_TAILWIND);
 
     // useRef: values we must READ inside callbacks without causing re-renders
     const abortRef = useRef<AbortController | null>(null);
@@ -22,12 +25,23 @@ export function useGenerate() {
     const refiningRef = useRef(false); // is the current request a /refine call?
     const changedRef = useRef(false); // did this refine call actually change the code?
     const projectIdRef = useRef<string | null>(null);
+    const targetRef = useRef(HTML_TAILWIND);
     const wasBusyRef = useRef(false);
 
     const rememberProject = useCallback((id: string | null) => {
         projectIdRef.current = id;
         setProjectId(id);
     }, []);
+
+    const setTarget = useCallback((id: string) => {
+        targetRef.current = id;
+        setTargetState(id);
+    }, []);
+
+    const applyTarget = useCallback((id: string) => {
+        setTarget(id);
+        setPreviewTarget(id);
+    }, [setTarget]);
 
     const stop = useCallback(() => abortRef.current?.abort(), []);
     useEffect(() => () => abortRef.current?.abort(), []); // cancel the request if the page unmounts
@@ -37,6 +51,7 @@ export function useGenerate() {
             case "meta":
                 setMeta({ width: evt.width, height: evt.height });
                 if (evt.project_id) rememberProject(evt.project_id);
+                if (evt.target) applyTarget(evt.target);
                 break;
             case "status":
                 setStatus(evt.message);
@@ -73,7 +88,7 @@ export function useGenerate() {
                 if (!previewRef.current.trim()) rememberProject(null);
                 break;
         }
-    }, [rememberProject]);
+    }, [applyTarget, rememberProject]);
 
     // Shared by generate and refine: POST a form, read the SSE stream, feed each event to handleEvent.
     const run = useCallback(
@@ -169,6 +184,7 @@ export function useGenerate() {
             const form = new FormData(); // browser API: builds the multipart body FastAPI expects
             form.append("image", file);
             if (hint.trim()) form.append("hint", hint.trim());
+            form.append("target", targetRef.current);
             await run("/generate", form, false);
         },
         [rememberProject, run],
@@ -190,6 +206,7 @@ export function useGenerate() {
             }
             if (!file) return;
             form.append("image", file);
+            form.append("target", targetRef.current);
             await run("/refine", form, true);
         },
         [run],
@@ -206,6 +223,7 @@ export function useGenerate() {
         const versions = project.versions;
         const latestCode = versions[versions.length - 1]?.code ?? "";
         rememberProject(project.id);
+        applyTarget(project.target || HTML_TAILWIND);
         previewRef.current = latestCode;
         setCode(latestCode);
         setPreviewCode(latestCode);
@@ -220,7 +238,7 @@ export function useGenerate() {
         const ext = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/webp" ? "webp" : "png";
         const file = new File([blob], `design.${ext}`, { type: blob.type || "image/png" });
         return { hint: project.hint, file };
-    }, [rememberProject]);
+    }, [applyTarget, rememberProject]);
 
     // Go back to the version before the last refine. Pure frontend: no request needed.
     const undo = useCallback(() => {
@@ -236,8 +254,8 @@ export function useGenerate() {
 
     return {
         code, previewCode, meta, scores, status, error, busy,
-        projectId, projects,
+        projectId, projects, target, previewTarget,
         canUndo: history.length > 0,
-        generate, refine, undo, stop, openProject,
+        generate, refine, undo, stop, openProject, setTarget,
     };
 }
