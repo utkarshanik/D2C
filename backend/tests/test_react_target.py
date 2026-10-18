@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from app.main import app
-from app.prompts.react_mui import ALLOWED_COMPONENTS, MUI_VERSION
+from app.prompts.react_mui import ALLOWED_COMPONENTS, MUI_VERSION, build_user_prompt
 from app.prompts.refine import MATCH_PROMPT
 from app.routes import generate as route
 from app.services.postprocess import extract_code
@@ -47,10 +47,19 @@ def test_prompt_pins_mui_and_lists_allowed_components():
     assert MUI_VERSION in target.system_prompt
     assert "```tsx" in target.system_prompt
     assert "@mui/icons-material" in target.system_prompt
-    for name in ("Box", "Button", "Typography", "TextField"):
+    for name in ("Box", "Button", "Typography", "TextField", "Checkbox", "Accordion", "FormControlLabel"):
         assert name in ALLOWED_COMPONENTS
         assert name in target.system_prompt
+    assert "useState" in target.system_prompt
+    assert "Do not redraw a control" in target.system_prompt
     assert "tailwindcss" not in target.system_prompt
+
+
+def test_user_prompt_asks_for_the_matching_control():
+    text = build_user_prompt(100, 40, (PaletteColor("#112233", 100.0),), "Industry")
+    assert "checkbox" in text
+    assert "accordion" in text
+    assert "Do not copy a control by drawing its pixels." in text
 
 
 def test_unknown_target_is_rejected():
@@ -69,6 +78,29 @@ def test_runnable_tsx_keeps_types_and_drops_imports():
     assert not runnable.strip().endswith("return App;")
     assert "const { Box, Button } = MaterialUI;" in runnable
     assert "const title: Title = " in runnable
+
+
+def test_multiline_import_is_removed_before_the_page_runs():
+    source = """import React, { useState } from "react";
+import {
+  Box,
+  Checkbox,
+  FormControlLabel,
+} from "@mui/material";
+
+export default function App() {
+  const [on, setOn] = useState(true);
+  return <Checkbox checked={on} onChange={() => setOn(!on)} />;
+}
+"""
+    runnable, name = to_runnable_tsx(source)
+    assert name == "App"
+    assert "import " not in runnable
+    assert "const { useState } = ReactGlobal;" in runnable
+    assert "const { Box, Checkbox, FormControlLabel } = MaterialUI;" in runnable
+    page = build_preview_html(source)
+    assert "import {" not in page
+    assert "Cannot use import statement" not in page
 
 
 def test_icon_import_becomes_an_error_page():

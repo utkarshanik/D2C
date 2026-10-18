@@ -91,29 +91,60 @@ def _bindings(clause: str, module: str) -> list[str]:
     return lines
 
 
+def _is_import_start(line: str) -> bool:
+    stripped = line.lstrip()
+    if stripped.startswith("import("):
+        return False
+    return stripped.startswith("import ") or stripped.startswith("import{") or stripped.startswith("import\t")
+
+
+def _closed_import(text: str) -> re.Match[str] | None:
+    flat = " ".join(text.split())
+    return _IMPORT_FROM.match(flat) or _IMPORT_SIDE.match(flat)
+
+
 def to_runnable_tsx(source: str) -> tuple[str, str]:
     """Drop imports and exports Babel cannot run inside one function.
 
     Type annotations stay in the text. Babel's TypeScript preset removes them
-    in the browser. React and ReactDOM are already in scope.
+    in the browser. React and ReactDOM are already in scope. Imports may span
+    several lines; a leftover `import` becomes "Cannot use import statement
+    outside a module" once the page runs.
     """
     kept: list[str] = []
     bindings: list[str] = []
-    for line in source.splitlines():
-        side = _IMPORT_SIDE.match(line)
+    lines = source.splitlines()
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not _is_import_start(line):
+            kept.append(line)
+            index += 1
+            continue
+
+        chunk = [line]
+        match = _closed_import(line)
+        while match is None and index + 1 < len(lines):
+            index += 1
+            chunk.append(lines[index])
+            match = _closed_import("\n".join(chunk))
+        if match is None:
+            raise HarnessError("Could not read an import statement.")
+
+        flat = " ".join("\n".join(chunk).split())
+        side = _IMPORT_SIDE.match(flat)
         if side:
             module = side.group(1)
             if module not in _MODULES:
                 raise HarnessError(f"Import {module!r} is not available.")
-            continue
-        imported = _IMPORT_FROM.match(line)
-        if imported:
+        else:
+            imported = _IMPORT_FROM.match(flat)
+            if imported is None:
+                raise HarnessError("Could not read an import statement.")
             is_type, clause, module = imported.groups()
-            if is_type:
-                continue
-            bindings.extend(_bindings(clause, module))
-            continue
-        kept.append(line)
+            if not is_type:
+                bindings.extend(_bindings(clause, module))
+        index += 1
 
     body = "\n".join(kept)
     exported = _EXPORT_FN.search(body)

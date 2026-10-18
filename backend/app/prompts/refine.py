@@ -4,6 +4,7 @@
 MATCH_PROMPT = """Image 1 is the TARGET design. Image 2 is a screenshot of how the CURRENT code renders.
 Compare them carefully: layout, alignment, spacing, sizes, colors, borders and text.
 Fix every visible difference. Keep anything that already matches.
+Keep a real control (checkbox, accordion, select, text field, button) and correct its styling. Do not replace it with a static shape.
 Return the FULL corrected {kind} in one ```{fence} fenced block. No explanations.
 
 Current code:
