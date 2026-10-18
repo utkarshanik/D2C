@@ -152,17 +152,3 @@ button.project.active {
   font: inherit;
   padding: 8px;
 }
-
-.react-preview,
-.react-preview .sp-wrapper,
-.react-preview .sp-layout,
-.react-preview .sp-stack,
-.react-preview .sp-preview-container,
-.react-preview .sp-preview-iframe {
-  height: 100%;
-}
-
-.react-preview .sp-layout {
-  border: 0;
-  background: #fff;
-}

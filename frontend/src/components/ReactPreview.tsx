@@ -1,46 +1,44 @@
-import { SandpackPreview, SandpackProvider } from "@codesandbox/sandpack-react"
+import { useEffect, useState } from "react"
 
-// Same versions the backend screenshot page loads, so the preview and the
-// refine screenshot are looking at the same React and MUI.
-const DEPENDENCIES = {
-    react: "18.3.1",
-    "react-dom": "18.3.1",
-    "@mui/material": "5.18.0",
-    "@emotion/react": "11.13.3",
-    "@emotion/styled": "11.13.0",
-    "@types/react": "18.3.12",
-    "@types/react-dom": "18.3.1",
-}
-
-const ENTRY = `import { createRoot } from "react-dom/client"
-import { CssBaseline, ThemeProvider, createTheme } from "@mui/material"
-import App from "./App"
-
-const root = createRoot(document.getElementById("root")!)
-root.render(
-  <ThemeProvider theme={createTheme()}>
-    <CssBaseline />
-    <App />
-  </ThemeProvider>
-)
-`
+const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000"
 
 export default function ReactPreview({ code }: { code: string }) {
+    const [html, setHtml] = useState("")
+    const [error, setError] = useState("")
+
+    useEffect(() => {
+        const form = new FormData()
+        form.append("code", code)
+        let cancelled = false
+        setError("")
+
+        fetch(`${API_URL}/preview-html`, { method: "POST", body: form })
+            .then(async (response) => {
+                if (!response.ok) throw new Error("Preview failed")
+                return response.text()
+            })
+            .then((page) => {
+                if (!cancelled) setHtml(page)
+            })
+            .catch(() => {
+                if (!cancelled) setError("The preview could not be built.")
+            })
+
+        return () => {
+            cancelled = true
+        }
+    }, [code])
+
+    if (error) return <div className="empty">{error}</div>
+    if (!html) return <div className="empty">Loading preview...</div>
+
+    // Same sandbox as the HTML preview: scripts can run, the page cannot read the app.
     return (
-        <div className="react-preview">
-            <SandpackProvider
-                template="react-ts"
-                theme="light"
-                files={{ "/App.tsx": code, "/index.tsx": ENTRY }}
-                customSetup={{ dependencies: DEPENDENCIES }}
-                options={{ recompileMode: "delayed", recompileDelay: 400 }}
-            >
-                <SandpackPreview
-                    showOpenInCodeSandbox={false}
-                    showRefreshButton={false}
-                    style={{ height: "100%" }}
-                />
-            </SandpackProvider>
-        </div>
+        <iframe
+            title="Generated preview"
+            srcDoc={html}
+            sandbox="allow-scripts"
+            className="preview-frame"
+        />
     )
 }

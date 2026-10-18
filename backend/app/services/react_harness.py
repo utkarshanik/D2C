@@ -91,7 +91,7 @@ def _bindings(clause: str, module: str) -> list[str]:
     return lines
 
 
-def to_runnable_tsx(source: str) -> str:
+def to_runnable_tsx(source: str) -> tuple[str, str]:
     """Drop imports and exports Babel cannot run inside one function.
 
     Type annotations stay in the text. Babel's TypeScript preset removes them
@@ -136,8 +136,12 @@ def to_runnable_tsx(source: str) -> str:
 
     body = re.sub(r"(?m)^[ \t]*export\s+(?=const|function|class|let|var|type|interface|enum)", "", body)
     body = re.sub(r"(?m)^[ \t]*export\s+\{[^}]*\}\s*;?\s*$", "", body)
+    if not re.fullmatch(r"[A-Za-z_$][\w$]*", name):
+        raise HarnessError("The component must be a default export.")
     preamble = "const React = ReactGlobal;\nconst ReactDOM = ReactDOMGlobal;\n"
-    return preamble + "\n".join(bindings) + "\n" + body.strip() + f"\nreturn {name};\n"
+    # `return` is added after Babel runs. A top-level return is a syntax error
+    # in the file Babel parses, and that was leaving the preview blank.
+    return preamble + "\n".join(bindings) + "\n" + body.strip() + "\n", name
 
 
 def _js_string(source: str) -> str:
@@ -163,11 +167,12 @@ window.__ready = true;
 def build_preview_html(source: str) -> str:
     """Return a page that renders the component or shows why it could not."""
     try:
-        runnable = to_runnable_tsx(source)
+        runnable, export_name = to_runnable_tsx(source)
     except HarnessError as exc:
         return _error_page(str(exc))
 
     payload = _js_string(runnable)
+    exported = json.dumps(export_name)
     return f"""<!DOCTYPE html>
 <html>
 <head>
@@ -193,7 +198,7 @@ try {{
       ["typescript", {{ allExtensions: true, isTSX: true }}],
       ["react", {{ runtime: "classic" }}]
     ]
-  }}).code;
+  }}).code + "\\nreturn " + {exported} + ";";
   const App = new Function("ReactGlobal", "ReactDOMGlobal", "MaterialUI", compiled)(
     window.React, window.ReactDOM, window.MaterialUI
   );

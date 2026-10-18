@@ -63,11 +63,12 @@ def test_unknown_target_is_rejected():
 
 
 def test_runnable_tsx_keeps_types_and_drops_imports():
-    runnable = to_runnable_tsx(COMPONENT)
+    runnable, name = to_runnable_tsx(COMPONENT)
+    assert name == "App"
     assert "import " not in runnable
+    assert not runnable.strip().endswith("return App;")
     assert "const { Box, Button } = MaterialUI;" in runnable
     assert "const title: Title = " in runnable
-    assert runnable.strip().endswith("return App;")
 
 
 def test_icon_import_becomes_an_error_page():
@@ -129,6 +130,15 @@ def test_generate_react_target_uses_the_mui_prompt_and_saves_it(monkeypatch):
     detail = client.get(f"/projects/{meta['project_id']}").json()
     assert detail["target"] == "react_mui"
     assert "export default function App" in detail["versions"][0]["code"]
+
+
+def test_preview_html_wraps_the_component():
+    response = client.post("/preview-html", data={"code": COMPONENT})
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "MaterialUI" in response.text
+    assert "window.__ready" in response.text
+    assert "Hello" in response.text
 
 
 def test_generate_rejects_an_unknown_target():
