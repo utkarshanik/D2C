@@ -136,7 +136,10 @@ FALLBACK_MODEL=ollama/<local-vision-model>
 REFINE_ROUNDS=2
 SSIM_STOP_THRESHOLD=0.95
 CORS_ORIGINS=http://localhost:5173
+FIGMA_ACCESS_TOKEN=your-personal-access-token
 ```
+
+`FIGMA_ACCESS_TOKEN` is a personal access token from Figma → Settings → Security. It is only used when someone pastes a Figma link. Leave it empty to keep screenshot upload working without Figma. The free personal token is enough; the preview step is the only call to Figma.
 
 ## 7. API Contract
 
@@ -161,6 +164,36 @@ Response: `text/event-stream`. Each message is `data: <json>\n\n` with one of:
 - `code` events replace the displayed code with the cleaned version after each pass.
 - Frontend reads the stream with `fetch` and a stream reader (not `EventSource`, which only supports GET).
 
+### `POST /figma/preview`
+
+Request: `application/json`
+
+```json
+{ "figma_url": "https://www.figma.com/design/<fileKey>/<name>?node-id=1-2" }
+```
+
+The link must include a frame (`node-id`). The server asks Figma to render that frame, checks the image the same way as an upload, and stores it under a random 32-hex `preview_id` for about 30 minutes.
+
+Response:
+
+```json
+{ "preview_id": "<32 hex>", "width": 390, "height": 844, "name": "Home" }
+```
+
+`name` is empty when Figma does not provide one. The browser loads the image from `GET /figma/preview/{preview_id}/image`.
+
+Errors before an image exists are normal HTTP errors with a short `detail` string (bad link, no frame, no access). Creating a preview also deletes previews older than 30 minutes.
+
+### `POST /generate-from-figma`
+
+Request: `multipart/form-data`
+
+- `preview_id` (string, required)
+- `target` (string, optional): `html_tailwind` (default) or `react_mui`
+- `hint` (string, optional)
+
+Response: the same `text/event-stream` as `POST /generate`. The server reads the saved preview from disk and does not call Figma again.
+
 ## 8. Module Roadmap
 
 Build in this order. Each module must work and be testable on its own before starting the next.
@@ -176,6 +209,7 @@ Build in this order. Each module must work and be testable on its own before sta
 | 6 | Preprocessing | Palette and OCR text are added to the prompt | done |
 | 7 | Persistence | Projects and versions saved in SQLite; follow-up edits use history | done |
 | 8 | React + MUI target | Sandpack preview; MUI-aware prompt with an allowed-components list | done |
+| 9 | Figma link | Paste a frame link, preview the render, then generate from that image | done |
 
 Update the Status column as modules are completed.
 

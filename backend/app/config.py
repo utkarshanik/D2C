@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     REFINE_DEBUG_DIR: str = ""  # e.g. "debug": saves what each refine round sends and receive
     DATABASE_URL: str = "sqlite:///./data/d2c.db"
     DATA_DIR: str = "data"  # screenshots live in DATA_DIR/projects/<id>/
+    # Personal access token from Figma → Settings → Security. Empty disables the Figma tab's preview.
+    FIGMA_ACCESS_TOKEN: str = ""
 
 
 settings = Settings()

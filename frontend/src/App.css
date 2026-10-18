@@ -70,6 +70,85 @@
   max-height: 220px;
 }
 
+.source {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.source-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.source-tabs button {
+  flex: 1;
+  background: transparent;
+  border: 1px solid #ddd;
+}
+
+.source-tabs button[aria-selected="true"] {
+  border-color: #333;
+  font-weight: 600;
+}
+
+.figma,
+.figma-preview,
+.figma-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.figma-label {
+  font-size: 13px;
+  color: #444;
+}
+
+.figma input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  padding: 8px;
+}
+
+.figma-preview img {
+  max-width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  background: #f6f6f6;
+  border-radius: 8px;
+}
+
+.loading-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 13px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #ddd;
+  border-top-color: #333;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+
 textarea {
   width: 100%;
   box-sizing: border-box;

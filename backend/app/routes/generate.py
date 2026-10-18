@@ -14,7 +14,6 @@ SSE events (each is one line: `data: {json}` followed by a blank line):
   {"type": "error",  "message": "..."}
 """
 import asyncio
-import io
 import json
 import logging
 
@@ -24,15 +23,12 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
-# pillow: verify the upload really is an image, and read its size and true format.
-# We don't trust the filename or the client's content-type header.
-from PIL import Image, UnidentifiedImageError
-
+from app.services.images import MAX_BYTES, inspect_image
 from app.services.llm import generate_from_image
 from app.services.postprocess import extract_code
 from app.services.preprocess import preprocess_image
 from app.services.projects import add_version, create_project, delete_project
-from app.targets import UnknownTarget, get_target
+from app.targets import Target, UnknownTarget, get_target
 
 # Note: reading the upload needs the `python-multipart` package installed.
 # FastAPI imports it behind the scenes; without it, this route fails at startup.
@@ -40,28 +36,10 @@ from app.targets import UnknownTarget, get_target
 log = logging.getLogger(__name__)
 router = APIRouter()
 
-MAX_BYTES = 5 * 1024 * 1024  # 5 MB upload cap protects your server and your free quota
-FORMAT_TO_MIME = {"PNG": "image/png", "JPEG": "image/jpeg", "WEBP": "image/webp"}
-
 
 def sse(payload: dict) -> str:
     """Format one SSE event. The blank line at the end is what ends the event."""
     return f"data: {json.dumps(payload)}\n\n"
-
-
-def inspect_image(data: bytes) -> tuple[int, int, str]:
-    """Return (width, height, mime) or raise HTTPException(400)."""
-    try:
-        with Image.open(io.BytesIO(data)) as img:
-            img.load()  # fully decode so truncated or corrupt files fail here, not later
-            mime = FORMAT_TO_MIME.get(img.format or "")
-            if mime is None:
-                raise HTTPException(400, "Unsupported image type. Use PNG, JPEG or WEBP.")
-            return img.width, img.height, mime
-    except HTTPException:
-        raise
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError):
-        raise HTTPException(400, "File is not a valid image.")
 
 
 @router.post("/generate")
@@ -80,6 +58,18 @@ async def generate(
         chosen = get_target(target)
     except UnknownTarget:
         raise HTTPException(400, "Unknown target. Use html_tailwind or react_mui.")
+    return stream_generation(data, width, height, mime, hint, chosen)
+
+
+def stream_generation(
+    data: bytes,
+    width: int,
+    height: int,
+    mime: str,
+    hint: str,
+    chosen: Target,
+) -> StreamingResponse:
+    """Stream one first draft from image bytes. Shared by the screenshot and Figma routes."""
 
     async def event_stream():
         # Created before any tokens so a failed or abandoned run can be removed again.

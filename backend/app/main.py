@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.db.session import init_db
+from app.routes.figma import router as figma_router
 from app.routes.generate import router as generate_router
 from app.routes.projects import router as projects_router
 from app.routes.render import router as render_router
@@ -29,6 +30,7 @@ app.add_middleware(
 )
 # Register the generate router
 app.include_router(generate_router)
+app.include_router(figma_router)
 app.include_router(render_router)
 app.include_router(refine_router)
 app.include_router(projects_router)

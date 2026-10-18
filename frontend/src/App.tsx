@@ -15,7 +15,7 @@ export default function App() {
   const [manualTab, setManualTab] = useState<Tab | null>(null);
   const {
     code, previewCode, meta, scores, status, error, busy, projectId, projects,
-    target, previewTarget, canUndo, generate, refine, undo, stop, openProject, setTarget,
+    target, previewTarget, canUndo, generate, generateFromFigma, refine, undo, stop, openProject, setTarget,
   } = useGenerate();
 
   // Until the user clicks a tab: show the code while the first draft streams, the preview otherwise
@@ -27,6 +27,12 @@ export default function App() {
     setManualTab(null);
     setInstruction("");
     void generate(file, hint);
+  };
+
+  const onConfirmFigma = (previewId: string) => {
+    setManualTab(null);
+    setInstruction("");
+    void generateFromFigma(previewId, hint);
   };
 
   const onRefine = () => {
@@ -76,7 +82,7 @@ export default function App() {
             ))}
           </section>
         )}
-        <Uploader file={file} onSelect={setFile} disabled={busy} />
+        <Uploader file={file} onSelect={setFile} disabled={busy} onConfirmFigma={onConfirmFigma} />
         {meta && <p className="muted">Original: {meta.width} × {meta.height}px</p>}
         <textarea
           placeholder="Optional hint for the first draft, e.g. dark theme"

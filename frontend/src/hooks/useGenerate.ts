@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { API_URL } from "../api";
 import type { ImageMeta, OpenedProject, ProjectDetail, ProjectSummary, SseEvent } from "../types";
 import { HTML_TAILWIND } from "../targets";
-
-// import.meta.env.VITE_* values come from frontend/.env (Vite exposes only VITE_ ones)
-const API_URL: string = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
 export function useGenerate() {
     const [code, setCode] = useState(""); // what the code tab shows (raw while streaming)
@@ -92,7 +90,7 @@ export function useGenerate() {
 
     // Shared by generate and refine: POST a form, read the SSE stream, feed each event to handleEvent.
     const run = useCallback(
-        async (path: string, form: FormData, refining: boolean) => {
+        async (path: string, form: FormData, refining: boolean, pending = "Uploading...") => {
             abortRef.current?.abort();
             const controller = new AbortController(); // lets the Stop button cancel the fetch
             abortRef.current = controller;
@@ -102,7 +100,7 @@ export function useGenerate() {
             setBusy(true);
             setError("");
             setScores([]);
-            setStatus(refining ? "Refining..." : "Uploading...");
+            setStatus(refining ? "Refining..." : pending);
 
             try {
                 // fetch (not EventSource): EventSource can only send GET, but we POST a file
@@ -171,15 +169,19 @@ export function useGenerate() {
         wasBusyRef.current = busy;
     }, [busy, refreshProjects]);
 
+    const resetSession = useCallback(() => {
+        setCode("");
+        setPreviewCode("");
+        previewRef.current = "";
+        setHistory([]);
+        setMeta(null);
+        rememberProject(null);
+    }, [rememberProject]);
+
     // First run: screenshot (+ optional hint) in, first draft out. Starts a fresh session.
     const generate = useCallback(
         async (file: File, hint: string) => {
-            setCode("");
-            setPreviewCode("");
-            previewRef.current = "";
-            setHistory([]);
-            setMeta(null);
-            rememberProject(null);
+            resetSession();
 
             const form = new FormData(); // browser API: builds the multipart body FastAPI expects
             form.append("image", file);
@@ -187,7 +189,21 @@ export function useGenerate() {
             form.append("target", targetRef.current);
             await run("/generate", form, false);
         },
-        [rememberProject, run],
+        [resetSession, run],
+    );
+
+    // The preview id points at the frame image the user already approved.
+    const generateFromFigma = useCallback(
+        async (previewId: string, hint: string) => {
+            resetSession();
+
+            const form = new FormData();
+            form.append("preview_id", previewId);
+            if (hint.trim()) form.append("hint", hint.trim());
+            form.append("target", targetRef.current);
+            await run("/generate-from-figma", form, false, "Generating...");
+        },
+        [resetSession, run],
     );
 
     // Refine uses the saved project: the server loads the screenshot and earlier requests.
@@ -256,6 +272,6 @@ export function useGenerate() {
         code, previewCode, meta, scores, status, error, busy,
         projectId, projects, target, previewTarget,
         canUndo: history.length > 0,
-        generate, refine, undo, stop, openProject, setTarget,
+        generate, generateFromFigma, refine, undo, stop, openProject, setTarget,
     };
 }
