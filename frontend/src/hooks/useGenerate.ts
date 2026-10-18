@@ -14,11 +14,14 @@ export function useGenerate() {
     const [busy, setBusy] = useState(false);
     const [projectId, setProjectId] = useState<string | null>(null);
     const [projects, setProjects] = useState<ProjectSummary[]>([]);
+    const [projectsReady, setProjectsReady] = useState(false);
     const [target, setTargetState] = useState(HTML_TAILWIND);
     const [previewTarget, setPreviewTarget] = useState(HTML_TAILWIND);
 
     // useRef: values we must READ inside callbacks without causing re-renders
     const abortRef = useRef<AbortController | null>(null);
+    const sessionRef = useRef(0);
+    const runIdRef = useRef(0);
     const previewRef = useRef(""); // always the latest clean code (state could be stale inside callbacks)
     const refiningRef = useRef(false); // is the current request a /refine call?
     const changedRef = useRef(false); // did this refine call actually change the code?
@@ -94,6 +97,9 @@ export function useGenerate() {
             abortRef.current?.abort();
             const controller = new AbortController(); // lets the Stop button cancel the fetch
             abortRef.current = controller;
+            const session = sessionRef.current;
+            const runId = ++runIdRef.current;
+            const current = () => session === sessionRef.current && runId === runIdRef.current;
             refiningRef.current = refining;
             changedRef.current = false;
 
@@ -130,6 +136,7 @@ export function useGenerate() {
                     buffer = messages.pop() ?? ""; // the last piece may be incomplete: keep it
 
                     for (const message of messages) {
+                        if (!current()) return;
                         if (!message.startsWith("data: ")) continue;
                         let evt: SseEvent;
                         try {
@@ -141,10 +148,11 @@ export function useGenerate() {
                     }
                 }
             } catch (err) {
+                if (!current()) return;
                 if ((err as Error).name === "AbortError") setStatus("Stopped");
                 else setError((err as Error).message);
             } finally {
-                setBusy(false);
+                if (current()) setBusy(false);
             }
         },
         [handleEvent],
@@ -157,6 +165,8 @@ export function useGenerate() {
             setProjects((await res.json()) as ProjectSummary[]);
         } catch {
             // The list is a convenience. Generate and refine already surface their own errors.
+        } finally {
+            setProjectsReady(true);
         }
     }, []);
 
@@ -168,6 +178,22 @@ export function useGenerate() {
         if (wasBusyRef.current && !busy) void refreshProjects();
         wasBusyRef.current = busy;
     }, [busy, refreshProjects]);
+
+    const reset = useCallback(() => {
+        sessionRef.current += 1;
+        abortRef.current?.abort();
+        abortRef.current = null;
+        setCode("");
+        setPreviewCode("");
+        previewRef.current = "";
+        setHistory([]);
+        setMeta(null);
+        rememberProject(null);
+        setScores([]);
+        setStatus("");
+        setError("");
+        setBusy(false);
+    }, [rememberProject]);
 
     const resetSession = useCallback(() => {
         setCode("");
@@ -270,8 +296,8 @@ export function useGenerate() {
 
     return {
         code, previewCode, meta, scores, status, error, busy,
-        projectId, projects, target, previewTarget,
+        projectId, projects, projectsReady, target, previewTarget,
         canUndo: history.length > 0,
-        generate, generateFromFigma, refine, undo, stop, openProject, setTarget,
+        generate, generateFromFigma, refine, undo, stop, openProject, setTarget, reset,
     };
 }

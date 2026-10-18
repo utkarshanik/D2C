@@ -13,6 +13,7 @@ type FramePreview = {
 type Props = {
     disabled: boolean
     onConfirm: (previewId: string) => void
+    onPreviewChange?: (previewId: string | null) => void
 }
 
 const FALLBACK = "Could not load a preview from Figma. Try again."
@@ -24,7 +25,7 @@ const messageFrom = async (response: Response) => {
     return FALLBACK
 }
 
-export function FigmaLink({ disabled, onConfirm }: Props) {
+export function FigmaLink({ disabled, onConfirm, onPreviewChange }: Props) {
     const [link, setLink] = useState("")
     const [phase, setPhase] = useState<Phase>("idle")
     const [error, setError] = useState("")
@@ -33,6 +34,10 @@ export function FigmaLink({ disabled, onConfirm }: Props) {
     const requestRef = useRef(0)
 
     useEffect(() => () => abortRef.current?.abort(), [])
+
+    useEffect(() => {
+        onPreviewChange?.(preview?.previewId ?? null)
+    }, [onPreviewChange, preview])
 
     const handleCancel = () => {
         requestRef.current += 1
@@ -157,8 +162,8 @@ export function FigmaLink({ disabled, onConfirm }: Props) {
                         {preview.name ? ` · ${preview.name}` : ""}
                     </p>
                     <div className="row">
-                        <button type="button" onClick={handleOk} disabled={disabled} aria-label="OK, generate code">
-                            OK
+                        <button type="button" onClick={handleOk} disabled={disabled} aria-label="Use this frame and generate code">
+                            Use this frame
                         </button>
                         <button
                             type="button"
