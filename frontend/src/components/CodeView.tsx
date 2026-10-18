@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 // @monaco-editor/react: the VS Code editor as a React component (read-only code viewer here)
 import Editor, { type OnMount } from "@monaco-editor/react";
 
-export function CodeView({ code }: { code: string }) {
+export function CodeView({ code, language = "html" }: { code: string; language?: string }) {
     const editorRef = useRef<Parameters<OnMount>[0] | null>(null);
 
     // keep the newest line in view while tokens stream in
@@ -14,7 +14,7 @@ export function CodeView({ code }: { code: string }) {
     return (
         <Editor
             height="100%"
-            language="html"
+            language={language}
             theme="vs-dark"
             value={code}
             onMount={(editor) => { editorRef.current = editor; }}

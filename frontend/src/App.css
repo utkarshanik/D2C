@@ -139,3 +139,16 @@ button.project.active {
   border-color: #333;
   font-weight: 600;
 }
+
+.target {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: #444;
+}
+
+.target select {
+  font: inherit;
+  padding: 8px;
+}

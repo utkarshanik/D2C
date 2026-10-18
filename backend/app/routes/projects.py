@@ -64,7 +64,7 @@ async def edit_project(
     async def event_stream():
         try:
             async for evt in refine_step(
-                ctx.image, ctx.mime, ctx.width, ctx.height, ctx.code, ctx.instruction
+                ctx.image, ctx.mime, ctx.width, ctx.height, ctx.code, ctx.instruction, target_id=ctx.target
             ):
                 if (
                     evt.get("type") == "code"

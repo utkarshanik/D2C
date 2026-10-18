@@ -175,7 +175,7 @@ Build in this order. Each module must work and be testable on its own before sta
 | 5 | Refine loop (`refine.py`) | Compare and fix runs for N rounds with SSIM early stop | todo |
 | 6 | Preprocessing | Palette and OCR text are added to the prompt | done |
 | 7 | Persistence | Projects and versions saved in SQLite; follow-up edits use history | done |
-| 8 | React + MUI target | Sandpack preview; MUI-aware prompt with an allowed-components list | todo |
+| 8 | React + MUI target | Sandpack preview; MUI-aware prompt with an allowed-components list | done |
 
 Update the Status column as modules are completed.
 

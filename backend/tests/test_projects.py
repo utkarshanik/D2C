@@ -113,7 +113,7 @@ def test_follow_up_uses_stored_image_and_earlier_requests(monkeypatch):
     draft_llm(monkeypatch, ["```html\n<p>draft</p>\n```"])
     seen = {}
 
-    async def fake_refine(original, mime, width, height, code, instruction=""):
+    async def fake_refine(original, mime, width, height, code, instruction="", **_extra):
         seen["image"] = original
         seen["code"] = code
         seen["instruction"] = instruction
@@ -153,7 +153,7 @@ def test_follow_up_from_an_older_version_ignores_later_requests(monkeypatch):
     draft_llm(monkeypatch, ["```html\n<p>v1</p>\n```"])
     seen = {}
 
-    async def fake_refine(original, mime, width, height, code, instruction=""):
+    async def fake_refine(original, mime, width, height, code, instruction="", **_extra):
         seen["code"] = code
         seen["instruction"] = instruction
         yield {"type": "code", "code": "<p>v3</p>"}
@@ -181,7 +181,7 @@ def test_unchanged_follow_up_does_not_add_a_version(monkeypatch):
     fake_preprocess(monkeypatch)
     draft_llm(monkeypatch, ["```html\n<p>draft</p>\n```"])
 
-    async def fake_refine(original, mime, width, height, code, instruction=""):
+    async def fake_refine(original, mime, width, height, code, instruction="", **_extra):
         yield {"type": "status", "message": "Already close to the original, nothing to fix."}
 
     monkeypatch.setattr("app.routes.projects.refine_step", fake_refine)

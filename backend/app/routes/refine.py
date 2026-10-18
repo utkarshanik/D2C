@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 # them through the module so a changed limit (or a test patch) applies here too.
 from app.routes import generate as gen
 from app.services.refine import refine_step
+from app.targets import UnknownTarget, get_target
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -31,6 +32,7 @@ async def refine(
     image: UploadFile = File(...),
     code: str = Form(...),
     instruction: str = Form(""),
+    target: str = Form(""),
 ):
     data = await image.read(gen.MAX_BYTES + 1)
     if len(data) > gen.MAX_BYTES:
@@ -44,10 +46,16 @@ async def refine(
     instruction = instruction.strip()
     if len(instruction) > MAX_INSTRUCTION_CHARS:
         raise HTTPException(400, f"Instruction is too long (max {MAX_INSTRUCTION_CHARS} characters).")
+    try:
+        chosen = get_target(target)
+    except UnknownTarget:
+        raise HTTPException(400, "Unknown target. Use html_tailwind or react_mui.")
 
     async def event_stream():
         try:
-            async for evt in refine_step(data, mime, width, height, code, instruction):
+            async for evt in refine_step(
+                data, mime, width, height, code, instruction, target_id=chosen.id
+            ):
                 yield gen.sse(evt)
             yield gen.sse({"type": "done"})
         except Exception:

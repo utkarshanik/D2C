@@ -4,6 +4,7 @@ import { CodeView } from "./components/CodeView";
 import { Preview } from "./components/Preview";
 import { Uploader } from "./components/Uploader";
 import { useGenerate } from "./hooks/useGenerate";
+import { HTML_TAILWIND, REACT_MUI } from "./targets";
 
 type Tab = "preview" | "code";
 
@@ -14,7 +15,7 @@ export default function App() {
   const [manualTab, setManualTab] = useState<Tab | null>(null);
   const {
     code, previewCode, meta, scores, status, error, busy, projectId, projects,
-    canUndo, generate, refine, undo, stop, openProject,
+    target, previewTarget, canUndo, generate, refine, undo, stop, openProject, setTarget,
   } = useGenerate();
 
   // Until the user clicks a tab: show the code while the first draft streams, the preview otherwise
@@ -46,6 +47,17 @@ export default function App() {
     <div className="app">
       <aside className="sidebar">
         <h2>Design to code</h2>
+        <label className="target">
+          Output
+          <select
+            value={target}
+            onChange={(e) => setTarget(e.target.value)}
+            disabled={busy}
+          >
+            <option value={HTML_TAILWIND}>HTML + Tailwind</option>
+            <option value={REACT_MUI}>React + MUI</option>
+          </select>
+        </label>
         {projects.length > 0 && (
           <section className="projects">
             <h3>Saved projects</h3>
@@ -113,7 +125,9 @@ export default function App() {
           )}
         </div>
         <div className="panel">
-          {tab === "preview" ? <Preview html={previewCode} /> : <CodeView code={code} />}
+          {tab === "preview"
+            ? <Preview html={previewCode} target={previewTarget} />
+            : <CodeView code={code} language={previewTarget === REACT_MUI ? "typescript" : "html"} />}
         </div>
       </main>
     </div>
