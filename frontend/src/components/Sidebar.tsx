@@ -30,7 +30,7 @@ const ChatList = ({
 }) => (
     <>
         {projects.map((project) => {
-            const Icon = projectIcon(project.id)
+            const Icon = projectIcon
             const active = project.id === projectId
             const title = projectTitle(project)
             const versions = `${project.version_count} ${project.version_count === 1 ? "version" : "versions"}`

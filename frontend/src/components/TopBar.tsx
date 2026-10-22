@@ -54,7 +54,7 @@ export const TopBar = ({ projects, projectId, busy, onOpenProject, onNewChat, on
         ? projects.map((project) => ({
             id: project.id,
             label: projectTitle(project),
-            icon: projectIcon(project.id),
+            icon: projectIcon,
             disabled: busy,
             active: project.id === projectId,
             onSelect: () => onOpenProject(project.id),
