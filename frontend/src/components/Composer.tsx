@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { ArrowRight, Image, Link2, Mic, Paperclip, Sparkles, Square, X } from "lucide-react"
+import { ArrowUp, Image, Link2, Mic, Paperclip, Square, X } from "lucide-react"
 import { FigmaLink } from "./FigmaLink"
 import { SelectMenu } from "./SelectMenu"
 import { Uploader, type UploaderHandle } from "./Uploader"
@@ -45,7 +45,6 @@ type Props = {
     sendDisabled: boolean
     onSend: () => void
     onAlert: (message: string) => void
-    hasResult: boolean
 }
 
 const speechCtor = () => {
@@ -79,7 +78,6 @@ export const Composer = ({
     sendDisabled,
     onSend,
     onAlert,
-    hasResult,
 }: Props) => {
     const [shotOpen, setShotOpen] = useState(false)
     const [figmaOpen, setFigmaOpen] = useState(false)
@@ -203,33 +201,45 @@ export const Composer = ({
             <div className="composer-popover" hidden={source !== "figma" || !figmaOpen}>
                 <FigmaLink disabled={busy} onConfirm={onConfirmFigma} onPreviewChange={handlePreview} />
             </div>
-            <SelectMenu
-                step={1}
-                title="Design input"
-                value={source}
+            <textarea
+                className="composer-input"
+                value={instruction}
+                onChange={(event) => onInstruction(event.target.value)}
+                onKeyDown={(event) => {
+                    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return
+                    event.preventDefault()
+                    event.currentTarget.form?.requestSubmit()
+                }}
+                placeholder="Ask for a follow-up…"
                 disabled={busy}
-                onOpen={closePopovers}
-                onChange={handleSource}
-                options={[
-                    { value: "screenshot", label: "Screenshot", icon: Image },
-                    { value: "figma", label: "Figma link", icon: Link2 },
-                ]}
+                maxLength={1000}
+                rows={2}
+                aria-label="Instructions"
             />
-            <SelectMenu
-                step={2}
-                title="Output format"
-                value={target}
-                disabled={busy}
-                onOpen={closePopovers}
-                onChange={onTarget}
-                options={[...TARGET_OPTIONS]}
-            />
-            <label className="composer-field">
-                <Sparkles size={16} aria-hidden="true" />
+            <div className="composer-bar">
+                <SelectMenu
+                    label="Design input"
+                    value={source}
+                    disabled={busy}
+                    onOpen={closePopovers}
+                    onChange={handleSource}
+                    options={[
+                        { value: "screenshot", label: "Screenshot", icon: Image },
+                        { value: "figma", label: "Figma", icon: Link2 },
+                    ]}
+                />
+                <SelectMenu
+                    label="Output format"
+                    value={target}
+                    disabled={busy}
+                    onOpen={closePopovers}
+                    onChange={onTarget}
+                    options={[...TARGET_OPTIONS]}
+                />
                 {source === "screenshot" && file && (
                     <span className="file-chip">
                         <button type="button" onClick={() => setShotOpen(true)} title={file.name}>
-                            <Image size={14} aria-hidden="true" />
+                            <Image size={13} aria-hidden="true" />
                             <span>{file.name}</span>
                         </button>
                         <button type="button" aria-label="Remove screenshot" onClick={onClearFile} disabled={busy}>
@@ -238,53 +248,47 @@ export const Composer = ({
                     </span>
                 )}
                 {source === "figma" && figmaReady && (
-                    <button type="button" className="file-chip-btn" onClick={() => setFigmaOpen(true)}>
-                        <Link2 size={14} aria-hidden="true" />
-                        Figma frame
-                    </button>
+                    <span className="file-chip">
+                        <button type="button" onClick={() => setFigmaOpen(true)}>
+                            <Link2 size={13} aria-hidden="true" />
+                            <span>Figma frame</span>
+                        </button>
+                    </span>
                 )}
-                <input
-                    value={instruction}
-                    onChange={(event) => onInstruction(event.target.value)}
-                    placeholder={hasResult
-                        ? "Describe a change to refine this design"
-                        : "Add more details... (e.g. use Material UI, change colors)"}
-                    disabled={busy}
-                    maxLength={1000}
-                    aria-label="Optional instructions"
-                />
-            </label>
-            <div className="composer-actions">
-                <button
-                    type="button"
-                    className="icon-btn"
-                    aria-label={source === "figma" ? "Attach a Figma link" : "Attach a screenshot"}
-                    title={source === "figma" ? "Figma link" : "Attach screenshot"}
-                    onClick={handleAttach}
-                    disabled={busy}
-                >
-                    <Paperclip size={16} aria-hidden="true" />
-                </button>
-                <button
-                    type="button"
-                    className={listening ? "icon-btn listening" : "icon-btn"}
-                    aria-label={listening ? "Stop microphone" : "Dictate instructions"}
-                    aria-pressed={listening}
-                    title={listening ? "Stop microphone" : "Dictate instructions"}
-                    onClick={handleMic}
-                    disabled={busy}
-                >
-                    <Mic size={16} aria-hidden="true" />
-                </button>
-                <button
-                    type="submit"
-                    className="send"
-                    disabled={sendDisabled}
-                    aria-label={sendLabel(sendMode)}
-                    title={sendLabel(sendMode)}
-                >
-                    {sendMode === "stop" ? <Square size={14} fill="currentColor" aria-hidden="true" /> : <ArrowRight size={18} aria-hidden="true" />}
-                </button>
+                <div className="composer-actions">
+                    <button
+                        type="button"
+                        className="icon-btn"
+                        aria-label={source === "figma" ? "Attach a Figma link" : "Attach a screenshot"}
+                        title={source === "figma" ? "Figma link" : "Attach screenshot"}
+                        onClick={handleAttach}
+                        disabled={busy}
+                    >
+                        <Paperclip size={20} aria-hidden="true" />
+                    </button>
+                    <button
+                        type="button"
+                        className={listening ? "icon-btn listening" : "icon-btn"}
+                        aria-label={listening ? "Stop microphone" : "Dictate instructions"}
+                        aria-pressed={listening}
+                        title={listening ? "Stop microphone" : "Dictate instructions"}
+                        onClick={handleMic}
+                        disabled={busy}
+                    >
+                        <Mic size={20} aria-hidden="true" />
+                    </button>
+                    <button
+                        type="submit"
+                        className="send"
+                        disabled={sendDisabled}
+                        aria-label={sendLabel(sendMode)}
+                        title={sendLabel(sendMode)}
+                    >
+                        {sendMode === "stop"
+                            ? <Square size={12} fill="currentColor" aria-hidden="true" />
+                            : <ArrowUp size={20} aria-hidden="true" />}
+                    </button>
+                </div>
             </div>
         </form>
     )

@@ -9,8 +9,7 @@ export type SelectOption = {
 }
 
 type Props = {
-    step: number
-    title: string
+    label: string
     value: string
     options: SelectOption[]
     onChange: (value: string) => void
@@ -18,34 +17,34 @@ type Props = {
     disabled?: boolean
 }
 
-export const SelectMenu = ({ step, title, value, options, onChange, onOpen, disabled = false }: Props) => {
+export const SelectMenu = ({ label, value, options, onChange, onOpen, disabled = false }: Props) => {
     const [open, setOpen] = useState(false)
     const rootRef = useRef<HTMLDivElement>(null)
     const current = options.find((option) => option.value === value) ?? options[0]
+    const CurrentIcon = current?.icon
     useDismiss(open, () => setOpen(false), rootRef)
 
     return (
-        <div className="select up" ref={rootRef}>
+        <div className="select" ref={rootRef}>
             <button
                 type="button"
-                className="select-trigger"
+                className="chip"
                 aria-haspopup="listbox"
                 aria-expanded={open}
+                aria-label={`${label}: ${current?.label}`}
+                title={label}
                 disabled={disabled}
                 onClick={() => {
                     if (!open) onOpen?.()
                     setOpen((currentOpen) => !currentOpen)
                 }}
             >
-                <span className="step-badge" aria-hidden="true">{step}</span>
-                <span className="select-copy">
-                    <span className="select-title">{title}</span>
-                    <span className="select-value">{current?.label}</span>
-                </span>
-                <ChevronDown size={16} aria-hidden="true" />
+                {CurrentIcon && <CurrentIcon size={14} aria-hidden="true" />}
+                <span>{current?.label}</span>
+                <ChevronDown size={14} aria-hidden="true" />
             </button>
             {open && (
-                <ul className="select-menu" role="listbox" aria-label={title}>
+                <ul className="select-menu" role="listbox" aria-label={label}>
                     {options.map((option) => {
                         const Icon = option.icon
                         const selected = option.value === value

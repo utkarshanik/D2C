@@ -281,7 +281,6 @@ export default function App() {
                     sendDisabled={sendDisabled}
                     onSend={handleSend}
                     onAlert={setNotice}
-                    hasResult={hasResult}
                 />
             </div>
             <UpgradeDialog open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
